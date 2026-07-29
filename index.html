@@ -413,6 +413,7 @@ const FACETS = [
   { key:"workloads", label:"Workloads",        multi:true, grouped:true },
   { key:"employees", label:"Company size",     multi:false, order:["1 to 50","51 to 250","251 to 1,000","1,001 to 5,000","More than 5,000"] },
   { key:"users",     label:"Users",            multi:false, order:["1 to 25","26 to 100","101 to 500","501 to 2,000","More than 2,000"] },
+  { key:"segment",   label:"Microsoft segment",multi:false, order:["SMB","Corporate","Enterprise"] },
   { key:"reference", label:"Reference status", multi:false },
   { key:"source",    label:"Source",           multi:false },
   { key:"year",      label:"Go live year",     multi:false, desc:true },
@@ -556,6 +557,7 @@ function rowsToCards(rows){
     industry:  colIndex(H, "Industry"),
     employees: colIndex(H, "Employee Range", "Employees"),
     users:     colIndex(H, "User Range", "Users"),
+    segment:   colIndex(H, "MS Segment", "Microsoft Segment", "Segment"),
     summary:   colIndex(H, "Summary"),
     golive:    colIndex(H, "Go Live Month", "Go Live"),
     duration:  colIndex(H, "Duration (Months)", "Duration"),
@@ -596,6 +598,7 @@ function rowsToCards(rows){
       industry:  norm(get(I.industry)),
       employees: norm(get(I.employees)),
       users:     norm(get(I.users)),
+      segment:   norm(get(I.segment)),
       summary:   norm(get(I.summary)),
       workloads: wlCols.map(i => norm(row[i])).filter(Boolean),
       krs:       krCols.map(i => norm(row[i])).filter(Boolean),
@@ -681,7 +684,8 @@ function cardNode(c){
   const bits = [
     [c.city, c.country].filter(Boolean).join(", "),
     c.industry,
-    c.employees ? c.employees + " employees" : ""
+    c.employees ? c.employees + " employees" : "",
+    c.segment
   ].filter(Boolean);
   bits.forEach((b, i) => { if(i) meta.appendChild(el("i", null, "·")); meta.appendChild(el("span", null, b)); });
   card.appendChild(meta);
@@ -748,6 +752,7 @@ function valuesOf(c, key){
     case "workloads": return c.workloads;
     case "employees": return c.employees ? [c.employees] : [];
     case "users":     return c.users ? [c.users] : [];
+    case "segment":   return c.segment ? [c.segment] : [];
     case "reference": return c.reference ? [c.reference] : [];
     case "source":    return c.source ? [c.source] : [];
     case "year":      return c.year ? [c.year] : [];
@@ -763,7 +768,7 @@ function matchesFacet(c, key){
 function matchesQuery(c){
   if(!QUERY) return true;
   const hay = [c.name, c.summary, c.krs.join(" "), c.city, c.country, c.industry, c.tags.join(" "),
-               c.workloads.join(" "), c.owner].join(" ").toLowerCase();
+               c.workloads.join(" "), c.owner, c.segment].join(" ").toLowerCase();
   return QUERY.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
 }
 const visible = () => CARDS.filter(c => matchesQuery(c) && FACETS.every(f => matchesFacet(c, f.key)));
@@ -939,6 +944,7 @@ function openCard(c){
     ["Industry", c.industry],
     ["Company size", c.employees ? c.employees + " employees" : ""],
     ["Users", c.users],
+    ["Microsoft segment", c.segment],
     ["Workloads", c.workloads.join(" · ")],
     ["Go live", c.goliveLabel],
     ["Project duration", c.duration ? c.duration + " months" : ""],
