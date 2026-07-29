@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlfaPeople · Battle Cards</title>
+
+<!--
+  BATTLE CARDS — gallery renderer
+  ------------------------------------------------------------------
+  Reads battle-cards.xlsx sitting in the same folder and renders every
+  Active row as a 1200x675 card. Filter, search, print, export PNG.
+
+  BRAND: colours, fonts and both logos come from TemplateAP_PPTX.pptx.
+  Every colour is a CSS custom property in :root, so an official value
+  replaces an approximated one in a single line. The AlfaPeople logo and
+  the Microsoft Solutions Partner badge are embedded as data URIs, which
+  is what lets them survive the PNG export.
+-->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
+
+<style>
+:root{
+  /* ---- AlfaPeople theme, read from TemplateAP_PPTX.pptx ---- */
+  --red:#EA2419;          /* accent1 — the brand colour */
+  --red-dark:#B71C13;
+  --red-tint:#FAD3D1;     /* accent2 */
+  --red-wash:#FDEDEC;
+  --teal:#4F8FA5;         /* accent3 */
+  --green:#80A830;        /* accent4 */
+  --orange:#E17B2C;       /* accent5 */
+  --plum:#B4476C;         /* accent6 */
+
+  --ink:#464646;          /* dk1 — body text */
+  --ink-soft:#6A6A6A;     /* dk2 */
+  --ink-faint:#949494;
+  --line:#DADADA;
+  --line-soft:#E7E6E6;    /* lt2 */
+  --bg:#F2F2F2;
+  --surface:#FFFFFF;
+
+  /* ---- workload chip families, mapped to the theme accents ---- */
+  --ai-bg:#F8EDF1;      --ai-fg:#8A3453;      --ai-bd:#EDD2DC;
+  --d365-bg:#EBF3F6;    --d365-fg:#3A6C7E;    --d365-bd:#CCE0E7;
+  --pp-bg:#F1F6E7;      --pp-fg:#5A7A1F;      --pp-bd:#DAE8C0;
+  --other-bg:#F2F2F2;   --other-fg:#5A5A5A;   --other-bd:#DADADA;
+
+  --ok-bg:#F1F6E7;      --ok-fg:#516E1C;      --ok-bd:#DAE8C0;
+  --warn-bg:#FCF1E6;    --warn-fg:#9A5313;    --warn-bd:#F3DCC3;
+
+  --radius:10px;
+  --shadow:0 1px 2px rgba(70,70,70,.07), 0 6px 20px rgba(70,70,70,.09);
+  --font:"Segoe UI", Arial, Helvetica, sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--font);
+  background:var(--bg);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit}
+:focus-visible{outline:3px solid var(--red); outline-offset:2px; border-radius:4px}
+
+/* ============================================================ CHROME */
+.topbar{
+  position:sticky; top:0; z-index:40;
+  background:var(--surface); color:var(--ink);
+  padding:12px 24px;
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  border-bottom:1px solid var(--line);
+  box-shadow:0 1px 6px rgba(70,70,70,.06);
+}
+.topbar::after{
+  content:""; position:absolute; left:0; right:0; bottom:-3px; height:3px; background:var(--red);
+}
+.brand{display:flex; align-items:center; gap:12px; flex:none}
+.brand img{height:26px; display:block}
+.brand .sub{
+  font-size:11px; font-weight:600; color:var(--ink-faint);
+  letter-spacing:.1em; text-transform:uppercase;
+  border-left:1px solid var(--line); padding-left:12px;
+}
+
+.searchwrap{flex:1 1 300px; min-width:200px; position:relative}
+.searchwrap input{
+  width:100%; padding:9px 14px 9px 36px;
+  border:1px solid var(--line); border-radius:8px;
+  background:var(--surface); color:var(--ink); font-size:14px;
+}
+.searchwrap input::placeholder{color:var(--ink-faint)}
+.searchwrap input:focus{border-color:var(--red); outline:none; box-shadow:0 0 0 3px var(--red-wash)}
+.searchwrap svg{position:absolute; left:12px; top:50%; transform:translateY(-50%)}
+
+.topbar select{
+  padding:9px 12px; border-radius:8px; font-size:13px;
+  border:1px solid var(--line); background:var(--surface); color:var(--ink);
+}
+.btn{
+  border:1px solid transparent; border-radius:8px; padding:9px 14px;
+  font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:7px;
+  transition:background .12s ease, border-color .12s ease, color .12s ease;
+}
+.btn-quiet{background:var(--surface); color:var(--ink); border-color:var(--line)}
+.btn-quiet:hover{background:var(--bg); border-color:var(--ink-faint)}
+.btn-primary{background:var(--red); color:#fff}
+.btn-primary:hover{background:var(--red-dark)}
+
+/* ============================================================ LAYOUT */
+.shell{display:grid; grid-template-columns:264px 1fr; gap:24px; padding:22px 24px 60px; align-items:start}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr; padding:16px 14px 48px}
+  .facets{position:static !important; max-height:none !important}
+  .facets.collapsed{display:none}
+}
+
+/* ---- facet panel ---- */
+.facets{
+  position:sticky; top:82px;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:6px 4px 10px; max-height:calc(100vh - 104px); overflow-y:auto;
+  box-shadow:var(--shadow);
+}
+.facets h2{
+  font-size:11px; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--ink-faint); margin:14px 14px 6px; font-weight:700;
+}
+.fgroup{border-bottom:1px solid var(--line-soft)}
+.fgroup:last-child{border-bottom:none}
+.fgroup > summary{
+  list-style:none; cursor:pointer; padding:11px 14px;
+  font-size:12.5px; font-weight:700; color:var(--ink);
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.fgroup > summary::-webkit-details-marker{display:none}
+.fgroup > summary::after{content:"▾"; font-size:10px; color:var(--ink-faint); transition:transform .15s}
+.fgroup[open] > summary::after{transform:rotate(180deg)}
+.fgroup > summary:hover{background:var(--bg)}
+.fgroup > summary .cnt{
+  background:var(--red); color:#fff; border-radius:999px;
+  min-width:18px; padding:1px 6px; font-size:11px; text-align:center;
+}
+.fopts{padding:0 8px 10px}
+.fopt{
+  display:flex; align-items:center; gap:9px; padding:5px 6px;
+  font-size:12.5px; border-radius:6px; cursor:pointer; color:var(--ink);
+}
+.fopt:hover{background:var(--bg)}
+.fopt input{accent-color:var(--red); width:14px; height:14px; margin:0; flex:none}
+.fopt .lbl{flex:1; line-height:1.3}
+.fopt .cnt{font-size:11px; color:var(--ink-faint); font-variant-numeric:tabular-nums}
+.fopt.zero{opacity:.38}
+.subhead{
+  font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:700; padding:8px 6px 2px;
+}
+
+/* ---- results header ---- */
+.resbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px}
+.count{font-size:13px; color:var(--ink-soft)}
+.count b{color:var(--ink); font-size:15px}
+.chips{display:flex; gap:7px; flex-wrap:wrap}
+.chip{
+  display:inline-flex; align-items:center; gap:6px;
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:999px; padding:4px 6px 4px 11px; font-size:12px; color:var(--ink);
+}
+.chip button{
+  border:none; background:var(--line-soft); color:var(--ink-soft);
+  width:17px; height:17px; border-radius:50%; cursor:pointer; font-size:12px; line-height:1;
+  display:grid; place-items:center;
+}
+.chip button:hover{background:var(--red); color:#fff}
+.clearall{
+  border:none; background:none; color:var(--red); font-size:12px;
+  cursor:pointer; text-decoration:underline; padding:4px;
+}
+
+/* ---- grid ---- */
+.grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(430px,1fr)); gap:22px}
+@media (max-width:560px){.grid{grid-template-columns:1fr; gap:16px}}
+.tile{position:relative}
+.tileframe{
+  width:100%; overflow:hidden; border-radius:var(--radius);
+  box-shadow:var(--shadow); background:var(--surface);
+  cursor:pointer; transition:transform .14s ease, box-shadow .14s ease;
+}
+.tileframe:hover{transform:translateY(-2px); box-shadow:0 2px 4px rgba(70,70,70,.10), 0 14px 30px rgba(70,70,70,.16)}
+.tileactions{display:flex; gap:8px; margin-top:9px}
+
+/* ============================================================ THE CARD */
+.card{
+  width:1200px; height:675px; flex:none;
+  background:var(--surface); color:var(--ink);
+  font-family:var(--font);
+  padding:40px 52px 0; display:flex; flex-direction:column;
+  position:relative; overflow:hidden;
+  border-top:7px solid var(--red);
+}
+.card .chead{display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:56px}
+.card .logo{height:54px; max-width:280px; object-fit:contain; object-position:left center; display:block}
+.card .mono{
+  height:56px; min-width:56px; padding:0 18px; border-radius:8px;
+  background:var(--red); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:24px; font-weight:700; letter-spacing:.06em;
+}
+.card .aplogo{height:34px; display:block; flex:none}
+
+.card h1{font-size:44px; line-height:1.06; margin:24px 0 10px; color:var(--ink); font-weight:700; letter-spacing:-.4px}
+.card .meta{font-size:16px; color:var(--ink-soft); display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.card .meta i{font-style:normal; color:var(--line)}
+
+.card .rule{border:none; border-top:2px solid var(--red-tint); margin:18px 0 0; height:0}
+
+.card .body{flex:1; display:flex; flex-direction:column; min-height:0; padding-top:20px}
+.card .summary{font-size:17.5px; line-height:1.52; color:var(--ink); margin:0}
+.card .krs{margin:18px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:8px}
+.card .krs li{
+  font-size:16px; line-height:1.35; font-weight:700; color:var(--ink);
+  display:flex; gap:10px; align-items:flex-start;
+}
+.card .krs li::before{content:"›"; color:var(--red); font-weight:700; font-size:19px; line-height:1.1}
+
+.card .chiprow{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-top:auto; padding-top:22px}
+.wchips{display:flex; flex-wrap:wrap; gap:8px}
+.wchip{
+  font-size:13.5px; font-weight:600; padding:6px 13px; border-radius:999px;
+  border:1px solid var(--other-bd); background:var(--other-bg); color:var(--other-fg); white-space:nowrap;
+}
+.wchip.ai{background:var(--ai-bg); color:var(--ai-fg); border-color:var(--ai-bd)}
+.wchip.d365{background:var(--d365-bg); color:var(--d365-fg); border-color:var(--d365-bd)}
+.wchip.pp{background:var(--pp-bg); color:var(--pp-fg); border-color:var(--pp-bd)}
+.card .users{text-align:right; flex:none; line-height:1.2}
+.card .users b{display:block; font-size:20px; color:var(--ink); font-weight:700}
+.card .users span{font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); font-weight:600}
+
+.card .cfoot{
+  margin:20px -52px 0; padding:12px 52px;
+  border-top:1px solid var(--line); background:#FAFAFA;
+  display:flex; align-items:center; gap:12px;
+  font-size:13px; color:var(--ink-soft); min-height:62px;
+}
+.card .cfoot .ftext{display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex:1}
+.card .cfoot i{font-style:normal; color:var(--line)}
+.card .msbadge{height:30px; display:block; flex:none; opacity:.95}
+.badge{
+  font-size:11.5px; font-weight:700; letter-spacing:.02em;
+  padding:4px 11px; border-radius:999px; border:1px solid; white-space:nowrap;
+}
+.badge.ok{background:var(--ok-bg); color:var(--ok-fg); border-color:var(--ok-bd)}
+.badge.warn{background:var(--warn-bg); color:var(--warn-fg); border-color:var(--warn-bd)}
+
+/* ============================================================ MODAL */
+.overlay{
+  position:fixed; inset:0; z-index:60; background:rgba(70,70,70,.55);
+  display:none; align-items:flex-start; justify-content:center;
+  padding:34px 20px; overflow-y:auto;
+}
+.overlay.on{display:flex}
+.sheet{background:var(--surface); border-radius:12px; max-width:1264px; width:100%; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.3)}
+.sheet .sbar{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; border-bottom:1px solid var(--line)}
+.sheet .sbody{padding:20px; overflow-x:auto}
+.detail{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px 26px; padding:20px; border-top:1px solid var(--line); background:#FAFAFA}
+.detail div span{display:block; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); font-weight:700; margin-bottom:3px}
+.detail div p{margin:0; font-size:13.5px; color:var(--ink); word-break:break-word}
+.detail a{color:var(--red)}
+
+/* ============================================================ STATES */
+.state{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:40px 34px; text-align:center; box-shadow:var(--shadow); max-width:660px; margin:40px auto;
+}
+.state h3{margin:0 0 8px; font-size:19px; color:var(--ink)}
+.state p{margin:0 auto 18px; font-size:14px; color:var(--ink-soft); line-height:1.6; max-width:480px}
+.state code{background:var(--bg); padding:2px 6px; border-radius:4px; font-size:13px; color:var(--ink)}
+.drop{border:2px dashed var(--line); border-radius:var(--radius); padding:24px; margin-top:18px; transition:.15s}
+.drop.hot{border-color:var(--red); background:var(--red-wash)}
+.err{font-size:12.5px; color:var(--red-dark); background:var(--red-wash); border:1px solid var(--red-tint); border-radius:8px; padding:9px 12px; margin-top:14px; text-align:left}
+.hint{font-size:12px; color:var(--ink-faint); margin-top:14px; line-height:1.6}
+.hidden{display:none !important}
+#stage{position:fixed; left:-100000px; top:0; width:1200px; height:675px}
+
+/* toast */
+#toast{
+  position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+  background:var(--ink); color:#fff; padding:11px 18px; border-radius:8px;
+  font-size:13px; max-width:560px; line-height:1.5; z-index:90;
+  box-shadow:0 8px 28px rgba(0,0,0,.28); display:none;
+}
+#toast.on{display:block}
+
+/* ============================================================ PRINT */
+@media print{
+  @page{size:landscape; margin:8mm}
+  body{background:#fff}
+  .topbar,.facets,.resbar,.tileactions,.overlay,.state,#toast,.noprint{display:none !important}
+  .shell{display:block; padding:0}
+  .grid{display:block}
+  .tile{page-break-after:always; break-after:page; margin:0}
+  .tileframe{box-shadow:none; border:1px solid var(--line); border-radius:0}
+  .tile:last-child{page-break-after:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img id="brandlogo" alt="AlfaPeople">
+    <span class="sub">Battle Cards</span>
+  </div>
+
+  <div class="searchwrap">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#949494" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" type="search" placeholder="Search customer, summary, results, tags…" autocomplete="off" aria-label="Search cards">
+  </div>
+
+  <select id="sort" aria-label="Sort cards">
+    <option value="updated">Recently updated</option>
+    <option value="added">Recently added</option>
+    <option value="name">Customer name</option>
+  </select>
+
+  <button class="btn btn-quiet" id="togglefacets" type="button">Filters</button>
+  <button class="btn btn-quiet" id="print" type="button" title="One card per page">Print</button>
+  <button class="btn btn-quiet" id="reload" type="button" title="Re-read the spreadsheet">Reload data</button>
+</header>
+
+<div id="boot" class="state">
+  <h3>Loading the spreadsheet…</h3>
+  <p>Reading <code>battle-cards.xlsx</code> from this folder.</p>
+</div>
+
+<div id="picker" class="state hidden">
+  <h3>Point me at the spreadsheet</h3>
+  <p>The browser will not let a page opened straight from disk read a neighbouring file — a security rule, not a bug.
+     Choose the workbook once and everything works normally.</p>
+  <div class="drop" id="drop">
+    <button class="btn btn-primary" id="choose" type="button">Choose battle-cards.xlsx</button>
+    <div class="hint">…or drag the file here. <code>.xlsx</code> and <code>.csv</code> both work.</div>
+  </div>
+  <div class="hint">
+    <b>To skip this step permanently:</b> put both files in a SharePoint or OneDrive document library and open the HTML
+    from there, or serve the folder over any web server. Loaded over http/https the page finds the workbook by itself.
+  </div>
+  <div id="pickerr" class="err hidden"></div>
+</div>
+
+<main class="shell hidden" id="shell">
+  <aside class="facets" id="facets" aria-label="Filters">
+    <h2>Filters</h2>
+    <div id="facetbody"></div>
+  </aside>
+
+  <section>
+    <div class="resbar">
+      <div class="count"><b id="n">0</b> <span id="nlabel">cards</span></div>
+      <div class="chips" id="activechips"></div>
+      <button class="clearall hidden" id="clear" type="button">Clear all filters</button>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="state hidden" id="empty">
+      <h3>No cards match these filters</h3>
+      <p>Loosen a filter or clear them all to see the full library again.</p>
+      <button class="btn btn-primary" id="clear2" type="button">Clear all filters</button>
+    </div>
+  </section>
+</main>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-label="Card detail">
+  <div class="sheet">
+    <div class="sbar">
+      <strong id="mtitle" style="font-size:15px"></strong>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="mdl" type="button">Download image</button>
+        <button class="btn btn-quiet" id="mclose" type="button">Close</button>
+      </div>
+    </div>
+    <div class="sbody" id="mbody"></div>
+    <div class="detail" id="mdetail"></div>
+  </div>
+</div>
+
+<div id="stage" aria-hidden="true"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+
+/* ============================================================ BRAND ASSETS
+   Extracted from TemplateAP_PPTX.pptx and embedded as data URIs. Same origin
+   by construction, so the PNG export can always rasterise them.            */
+const BRAND = {
+  ap: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAsoAAACECAMAAAC+hf1HAAAAYFBMVEUBAQFERETqJBlSUlL18vJDQ0NDQ0PuYlrxop72ExD6+vrzZmPtQznqLiPpLSLtYVntY1r0qafvgnz7YR7wnZn18fHvmpbywL23IxPsQzrrQzqtW1vwiXX05eR/AADuhHy+jk4GAAAAIHRSTlMA+/4W/qNY+v4JDA33oWSmXBX/B5diXf8Dp1wDEqUCXMqk7b4AABY5SURBVHja7Z2JmuOoDkadKOA1W1Vqne6Z93/LcZw4MSBAAuykq9F378x0V8XxcvwjhCSKgmFtW9fDfzTvp31ZduuLVZvN79+nffHeDD+s69e2LrJle1Jr2wufzfv+a7tdT61HebMp1+tuu93uD8cB59e2zfcs2/NZc8H4ePje7m9ibKB8tq4st7sR5ybfuWxPZRev4tgeEIx1lAcr94fXtrl9Mlu251Hlpjnuy7XFDJQHnP+rm+xjZHs236I5dGurdSjKve17P6POPnO2JwH5s//H/mvtMhvK6+3Xf/0xXjPM2R4ftjj//2B3LSaqjMt2+T0cIrvM2R5uvw5ujs+4buwo9z89nCeAmeVsD9Xkujh6Qfah3Nt71uVsDwa5OazXVJRdv7Fv++lfhjnbY+Z7PXmH/ToNyuvtd9PDnO9qtuWtJnnJZJTX60N7mURmy7aw/UNzLsgo905GluVsy3P8WTRf67Qor7tDkZdLsi084evdZDrJVJTX611Oysi2MMl05+KGckX5zd2xqHO2XLYFoxfUCR8X5fXuV5FRzraUn1wX/7FIvqRg0FBe75rsYWRbxo514cqCi0W5Z/n130xztmX8ZCbJ9sQ469wv3+dss9snb8Y3uMo8lM8s55hctpmtl8v2i43yx9m/YEh5nddKss1Ncv153K7ZKHNc5asuB7oY4Pkz47OejwIM/4DrH87/AZDiHpMOApDmy57cIOhBUkWZT/L6hY3y+vupl0pAoRbmvOOet+lv4HkeP7mod3ySeQGMa6LcayDLUjWGdgFoH3Xq8VkXL78nert+FyThU/ptKso/mWbwP41Aez1+r5dBeb37LF4DzlCsVBMQ/Fnp4U0Y39UTHQtWr7P6YVET1y/72ao8uRci7ZW2dbsNRvnF6kmX1aaqSj3AUfNlGQppPnO6bAnjk1bpt+MmlkF5/DYJfw/KKS+1LkLcC3dYefjZ1apSY5k9NiMY9DegSYhyfzjppEsuifJA8891MuZCuS0CSXagXE5J3mw+pjDvWqYsAwoZXbcIKAPiwzwY5eRj789HuW7bNozkIRb3UXpB3mjEcyNygFOWEuV+HuIDa3mUL8KcUWZ4F/y1EXdYudxgdv/FLdfBwDEj3wMvyuCV5MegzBl6MspnlOt1Uv8CJ3nqMW85C9hWzkSqaR8Ns4eg/ENZngfl0OiFFeVqwu5gVWWwXNevVGXup3YQCZdfleXqWVFeyYzy3NGL3jYYyi+mCN9g/uhuMz+yuwx20JKhLFdLoyxQs/hRPy+OMRPKr9uUKL+YrvFEqqu7LNch1x3mYXgdDLE0ysOqnmHnFU2ROqD916BcF+Gi3CEol0jAYvqD8a93dfFJvu5Yunwoi9XSKIMjhG68WDKjTLRgUb4EMDoSyeOPqjvLNFk+Z0Q4A69NNMpgWUGWYyrGkij3F6TD/APDyzOg3Lus36EkI8vWnZ3k0ceobrHllopAtFJ6UJZYQHdM7IFLdpFYBOVbaqn44bI8A8p1hCgjHe8rB8nXn34wY8vgjC7Q7oMbZcRTRnQwNoWLrsrmOckfN++bAeXX4Jgy1pC2dJI8uhjMQj/3nAxiVRlTfVEo2fZpUjxZKKvnLHIEg+Jf7CJRRkh+cXokm3viMolld6BMxKKMfMEsqxJMVVbO6uetX6dHua7DRfmageEIuHl0vKZlyHnCC5SgqxNlw4GxaCAsq8rwo53lGVCO8C+Maii3o3xHubx7yzVblIUMkFA3ymbs6/GqrJ1WRtkvym2Ef6HN+sqNT5T1qhMSynoFiE6eSI4yFM/gYCiDhcgoe13l4PQLMy2OQLImy6RyEh1cwx+QkSjLwCXEmVVZ8TAyyn5V3iXzL0qsXsSN8q72Pn4dNGkGHIQ/wOBAGfwog/bf1qJV5zNhogx+lAELrXCiLYD/NgGtS0MF15Kl5xgMlAG/StBd5QiUVWeh9DrKZtaG11k2s8mwYg/pnZKxUJbOB3i/v3oVN7gnh4lRhnvYXSnXJs9QAb2SGzfg/+TVDzIKye8tRFKpsnaO6BnW20iUSz160XESkPzOskQglGY8rkmKspbjozyS69qfnsZ2aTNwbT6wAMrX0UGqpzGcxXWRkrb6JPEj+N+HyX3A6tN9xyChDONJ6ufYH9+g2Ydyd0437hyucskTZS7KIEz/ApunJXUwdJN3qUMaC+h10rCUKoOtOpxWrD28CLb+Bc4jjAv5q8A7wVBlcF6k8rGdL0CxsXrAqn9REeZ8ppTv3CybmKH+s3+ixkLZljBMzJwXMD/K4OxyQPK5PAcYYpwQsmalvVIQg7L7lovp4a2ijJSZVhrOCpSjKHc8B9vrLEuUQXb4LB5lxhO8LHtHotyoKEsNZPCLohtmr6qassdG2XUML8pAqbqZDh5bKsgmzIqr8EEUZb2dkaf02pj0DVeNxOPgmVDGOYqKK0uaa0GUVdoBrOML/UY4xigPykB526aHR1XZArJe4zSd5JECcTjKr66Jsg1BroexMMroEiQbZetqH0jq4ABFFIwColG2RcT9DobknSKG8svGaSOuU/+iqzxpRHf70FH+ZKAsbSE63zLJ4igjJxSzcK0wRa52tTmhjHJZiEbZ8j54UZbMwyMoVxufXWCe+hd0UdarAXf2Ej+zOnVyU5iyvDzKJstRmXFgvxjn2IA5oQWn8BvDjHcj8GO4UQaON2cJYHRK2KK6Fv9Pyv9HZrtpumZFC8QhKG/tvjI4G3DyqkkegLKxBslEWfUvwOFdjJ1zkTihJNyMa/jxEiMm6TLSifIewiTqsgvlBv0K+0UCOuurpnO8Um3K+TFleerzksMXCMquJAywv93Ak+UHoGwWEPIcDGm7cvMJTxb+hHCDiEUyhbw7bma8WHhO7bKmMp4E2tIXSy1woYxMkibttM1zHH70ZSX5xVb/hHSBo8aUjRyMS1VUTY3EKT3onx7lVZwq24pI8AJWGDMVPAWuZgaL1BuTg7cZtfQ504SpjANl43UT9600ACNjOICN5IoWblZFeZ0YZfOeujxGZxz1IShLCEVZf5jSpohooo2wv0/G/ENifqp6BFMkpHdmqYdLBc9XBu/UUy99LIo1rYXFdCG7MtoZMkT5+rslaSc/aVc5rBUyzL3aJw3HbczSsCzj6jl1DFW2PUxTrMFMzRBWVnVRlsYRAFBQ7CibuwABErkWdJT1TG0zl8M4RWGgvKHkUZQvleZgbOiTvs5IObKiDEj6hXsQg1Q5GOb+IHeUx7Qh/fFhNEMYysZi3iQVTPpjber3CC2RTfpvmbHO1v+54amyeQ36MVwoF+7XFTlF0FCmZgR1KsscUS6NL7CrMpJ+4c6YT6XK6LM592CcTrHu3htcc2cBm1pDmIOBj/DadKggJUmobpktLuI8A913I6CM+UhARNm6zKm9KupvhZCsNJ2tWKLMQll41q44+XFR+cpAym0HdJwIQtns5wKI3+GaHAgbypI6U3ZVY1FQNoYQxrRPEM5Rfa0FijI9DmFpA+6tBtz4d71G+tBKr2xLe1IRF+WgAh1PgJCAMhaD6E+2wZxI4SrhkDaGxCpkYAhQZeTbiKrsD5CgpxEmymv37gy+V6AibeBuPFDwhZ1XkEyVrcIL1KxMJsoA+HRJfdBKK1DirPF+Eg2rXFDaVw2JKIPD0SGiLKhvmyxMPElIbgJRrsxfxVEGYzkPKehnFP0vocpmB043yvcqFWfGGtgcB2ogXVqGfOmpRLQP81SUAQRl1q4fQ1AfhXSjvA7zLxhiXq29KIN7eYQ/8VsEZU8atc/BwDuWToIlyvtN11SJR7nca0qNDmyQg+H4Tce0T9in+vajF0Gecjf+aslzltGvsDgYnkgcrtz2QfcZUdZm7XhoenouigcjybnOEr8Pwns1K8Lc0YMy2EOTFJQ9m4xaUGb4F/ee3+riH6lCVU+fs6AscSj0HvFUWU6NMkSjvPLt2oApp6Q4U4azbKPTd43RKLu+0IIy6K4ysRLGRJkUvvi4/6qallE5szzRlwVfuDaGWss1kdOW51Bl9a2yhAfBiTqrsEp9yr4zjEeZFNHzFf6LKJQlOU9lijLdv6iwVKKby1x6sjc06UZRRnNebq0VpgBRt3BPi/K0bv5WlX1OD0uLslbRpO1l4jEfyoQWTNIWP2I4GDJOlT0XOUX5y7JRiD82/GGbAeLKfPs9zQmxpBNZVvr8lUCzq/LZrRFUJGNQFuAfhFjJppxZHzLSL4Myq7JAucit5l+UkaJsSRAtrYGOLdqYFizo+RN/LBgmiisD806Ho4w2D0uKMsGDikXZ5S0kR3nHdpW1MEQ1ScRXy08ueXRdWb5UlT1kt301dqIEe06cZNKTXJUl7z6HoiwknkQTibIdTvo6CxNlWAzlW23fBxVlVZRvZddGlfZH9XKGWC2kMkV/Z/byRGoIgP4o5ZyrfVFFbVSUxdDi3lMPF63KhB7SfyjKVFcZE+XS23LAvoyCVlzb8nsk48HNgDKfJD7KzhZXsIpBWV/p/WEoF0yU9UQN5Q9dxSYZ74NhW/8lbnkKM6HMv8cslC8ppNQFB0YgJKNMiA3rzcJLhzTjTRSx7kSAwdn0ky6mCKVEOWyvdQfK4hbNm9Sj+NgSKVEu/moH40V1L5B9gfU2A57FE6RnnLWrPfVBYv2lYlFugF3Z51+4Rpreujdmj0MZHKGxuVBeMBhXfHNQ1t2LEk1AUkIWnlVAs6OLKX9ilCv6VUF6ByNocHehrFerAXgXGYNQFpIQKf7Tg3Hnixxlmd6xXm9Ei0c9zup8sdJ1UESUbekXdFmcA2VL8MKTRuHJjCN5FbYEXSBbirhyWOp9rCoLdXHXeY2frYLyC8VRruybqbINWR8xpMdSXOFc8IXkKAtMCSaeAZrbFlrbR0CZvxUND2XX2iAD5egcDPJV3vYiISyRGLvyVeRCKJth7ZVtZU4QOK6nQVkSAtgQl69MMBn5eVYOhopyYGbcrOlEKsr/fisod94p351kZLN2ru3q4h9fyGvMOmNMuyC9gyFRkhVVbpBznw9lGYkyIckzOjNu7iRPJef2tm9fSdsHdarC8aJ89i/+JaZfgBRWQzJxIDHKZic1eIAqAysu7K5VWDpfOaSKhLOjXz16GJ0nyRPZKfUjWpQNVxmKgORhsEjmrChDfBVJSJkKK0nTLbRLVJFAbEEU5yJve1y7neVyY/SFu+zVHoXytjVRJiYgezLwU/vKIPzrMLOjrD3/kCOQUW70vjBBwbigMlUQgfO+uu38BVEvyNpzClE2Uba3VyG2fcBfgBlQhgegXIgYZ5lTcQ0uBQ9qHgAFEWVOkcrU2ro9KNlAnavtRanrdFQkbluYoszcmMG2fiF/IsrgqoKmfR5W5DmV4l9A2GpfipYu9Mt8VT0MzMXASE4x6duarjL4PAWihyFgXpRXj3EwyI22SDfKOdK52rFQUXZ19YpttIU6y9eqqNLSBACvAEkhyq1ZCyVJifQmQ4VnmSQ5yvg26TOjrPVJi3SW3UEQF4Y0lMHZQtEVpwiU5V4ZWy1IUeK9wUtzV+AoUd4dzUwib1SN8Igx7y55BEMbcgFv5ZlclZ0dBbmfJ3ekDmp/qN0zKMiqrLpBQB986lumZ6VXmnaT/Uc+SndHziSL1jLIU8YbhwPMifK4V/BkkcTXYDmJg6F3yPa860YbaKPVOJCQd/ZXRrvt6P35CzLKWpcm4d17HiayfFC6Dl1gHraFsrZrSeAp79q21U+JvQ27fXVCzLzapwbDzH5xM6Gsb+AQJ8uCtEWlMT8ktdr0bBTh3IsEgi+y+VKatWy8LWcvkL/MvTxCvwgo3IP7DDkYYuzmBnizt5lQ1ruIQ9TnLb1xPRhK78Rcf7O5e5GIkMn/EMQ4eLYELtHdfaMmfYfW9C9YO+WwVvzi85WFpYRJuhplpfeVjUWkMR355uooeZ1miZU+Q5aTD18/J4VnwiL1d9p48YVXkzxbUBIu8v7iwQTldu9i2UycT+Apt0Vbe6LDoiiasLm5krGfBuWQIpIZUMYakgtz09RhB75z6xlzszOjR6qQ6nIT4uU17nsxVCXehigk2VUWTJQL9CLBXBsbL3L80WfR3gVXh7l6sSxjR4nyd6GVWuP7VkOgE6nHmqKDcemrSIpglgU+PMhxt6rpUCHMBWlzgBk/Td2QVbqKEJAxirubKr5tF3aRQj9AW99kWW84hJUydfGivD223uURlruPsCZSxpX5PTBmQ5lVFyUiP79CxDB2W1kKysC539MDfBa/tuZ+ZtVL6cgtiiG5O+juBQRH4uzxuAmSCZoHJK64jkCZ1bDLH1zwUVJEOlui4KPM047pAf4pbjO/MaLcW+fqfxiXct/W/kIobr4MOOpVU/TBgKdBmQETrojkfmF47ICFsmVw9Wcl01lWD9A2e6rvW6aog2q994e/lmU8n3tkP0lLF8KtFQuhTG5eJ6J0XUa+SI7lQC/KwLhIFeWiJepsF7888qupG2+ipuSFTLER6S4ISVTZe2v7WbZYCGUqjIIaB0EvJ3ZMsB+Cosr0i1QPcMvBJzUoiiJ53yLdtaS/1pT/dG9MJuvk6dMwYzfcuVAmegmCMYiRHTwyyrTtWp2ZNoKP8mfRHEiiHB2++PpVvNYz+Bf4xK9JirJ9Yj0uFNhzdBOjPMzyBUEVHdciXB8kJm+KleeOxKFMvEjF2qbZk0U5Iqb8ZS7zNdh2kiEFP9ZN7xJu4ABm7PWyRDAmtoiFVPm6nGdj6bKnhPPjgH/8tuZCGJsEfoxxN3D7Q6T19PBc5HXjDKMtWl0QWI4W5a7F9h45X5lQTjFkw7GzZIrpFOzeA1Q5vDJ2ai6w8KcVXp7eZBuSsb/B+JCGGy+QLSjl9TREiP9kSQjrz1/fF2VYSyCv+WsXc+XfJSVGOpFxDGUh3Iry5TYJSqMkMK4RhXhkuS3eia08Y3Ivmrq1TNuw7lABoy5yGOMvwf7VNIDsfw+N9WDq1zRFkUCZwX5uQH0bWD8xVBlCDqHcjJA3+H4Y9Jvq5p3UALGMIdls4pLtD7PAOtIl7Z9+6lfOGb7o3htzw4Y/0kY1iRhAZjid0CGNqZAYymN73fluCEzvufdb+qHfyXKkKHf9oFo3WdWyKi9gvR+7L2cT5VNTHDMIGeWlYHbM/ao4UT5lQc4oL4qyfe63iSmDGvzkDHNGeTlre5bxJZAoUc4kZ5QXt96dfdsnnvN1+/f+wJnkjPLywnxKujrSlU3xmWd8GeVHmOkwR4hy2U/46kxARvkRIPf/O57KNGnKXdm7yRnljPKDWO7Ja07TfcqC53zlvvcsPiEDkFF+FMxtP/u7s1yGBuLKU6/I2U3OKD9YmZu3Mk6UBy85g5xRfgKcm2KIMYfN+crTsckBuIzyE9i5V0XzdqrKcsOf85XlaZjuZU3OKD+DKB/bAeYTt7NWWZb7twHkrMoZ5Sea/hXNb6Yol7/PCLcZ5Izy8/nMze+K7lm8NdlHzig/ZyjjDPPx/ew1ezCuqtP7da6XYf4LUF79aap8Fdnm7f2w3w97OyDOce8e709vb8NvZh/5J9ulJ+zF/jgHY1Dl+vLvt/fTad/b0CJxaJN4/tPpTPEF41/Zu8j29DS3r//edPrtZnfPuJ/oZY6zPcD+ByZaTBvVRXh1AAAAAElFTkSuQmCC",
+  ms: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAd4AAABoCAMAAABopGEtAAAAeFBMVEVycnI0oNr5uAF3d3d3d3eAgIB3d3f///+oqKj/wQGBtyjlRRi/PwCVsBT+qgCJwSvlRxh+vjwqqdMzn9n5twD3uAE+vr40n9mCtyiqqlWqVVU/Pz///wD/AAAA/wBVqqqq/wD/VVUAf///wQEAAAB4eHjmRhmCtyndDmiyAAAAKHRSTlMN/fxgn/7RAQP+XlYEIAT+OgUHsGSvBFLFAwMEAQEBAwMDArIA/P7+kcnpcgAAEQpJREFUeNrtXYea5LYNRszqXuI4ie3EdkLF7/+GkdgAkKDK7sytZka0v7vblURR/AkSHRCeoQHAY457GbrSsSkI7vYv+O6rY+1fy1PfH2y/rg/CvXuS5j7gEdEFZafcjA5wj/Xz8KSbqffhPsUHBPde8H55sH0XZvr94mD7Ovx7fWvFtrkL1+YK6cdJ0vBo+EJQ03RveP93sH0ZvgrhH9/+eaR9+0X4596vVPOi3ndnwhOCNuVJeGB0nxheQz7Swsqd2rTw0kl6KPqdBzuN4HU34xRPR71jkNoJyfDqOj8PRb4OrAzvTaWA08E7f6XfRbxlc7bbT56TrcIv0UopbRd4E7SgbrURnY96p+GHwTRtwPs41OuCJexGotr8lUrfbiM6IbyDTxOWASxUUEnaqMehXnrQqGU/9nlj1vambOIJ4dWymqM7rPLZC5V4wT3i3lz3HLd8y42lgBPCKzNXHadZBSOwxszTou+h1PsE8CKS5BOfGF75DCUsMl8Fi2ZvUdk+mMJK94v5NeAVmaueeOu8PKJe9aXhFT7OS4sAqKrygvfk8FrbchuEsfK2uanOi3MOwIkWo5khhboAsK/c8J7MuCIXB74sHD+aZ/A+9H0L7w6oH88/O+cdwjv/sHwBuPm/Cm/8ZR3jM8BrdJVxOuYKiVfpvTrIDFElbedlc1NvtuDPyeDxXUPYbZob2juUdBIBF4Wfi3o1DPVPyFhBS70DYxMUU7ldWrSWd1anEP9XzJa+EFp9rDwHArjzTeUWNbjOOgF2lACuUtKQnd5nQHsseCuGrV2hnkoz8Bxeh2ortqUv86m5oGwzUoREsjFxlqtshne+Je4PhqoM232CmeHjrUwqW96tGiFdF4M0t6BsNQvPBK8asBbU6tfBK8lT8zU9tdMY7wD2knocJF1KXBTCJKvAl06rYWEas2WFtNeTXA6C5nyjPRW8MiUSDC3AHngFbrz0yuDFmY7UCyK4U+MsIHaO8AJZNBxglU1cLwsvblzAyUWhzW8HvL0KRIaXbJMLvFEBJs+ywd1X3l0rvF5eWXVPeml4QbTdQt2RYQ+8fjSDDbx0Ddio8rXDaTa28sggI+fX9g3cwl96c0bmyksaq/mObXhbA3L9o4WXHa8LQ0tpd/mnMZK1na4BW/rO8DbgG86kJfp9ZXiV4HPF3Kk24W1m2C62cqUioyXBa/BhOu/pMd3p0ujeq6P4oiIflYbrKPhmKq+mcC17+yItkVdhe3LOGfdHdpIiY+W2N2dGXhoZIt1xzhWjGSHLvAVsUSuAolPtGGeEqoe57wQvO5fruwm/VgbpqFLSCUrJp5R7HVDmygmM1Sa8jLVRkaDyPIHu4dVVb0i0wFGKrU9ZcnL+QtiAKU1+cntTjfE5vbu+WrWa8m2d8xNqrZJFuxc1CGO1CS+1+iuiCyyO7gxenSHwzNVHk5AHipgFyuWRfbMql8n+Hrmoelk1DmHb8D6dzjmqFjxhrlwjaUT8NuClxNvoRtJcQU9KDTKW7Ymeedp6+n5yW7YZwMCtj0hqNu5Kr2gx0kn27Mz1mn7zBrx0IrspchxeIn057vvELRMWydqTzVmFTldJVgKzYHnSfXERe0l4Q8tcUcaK7dQivCswSRiQmaW/dYMH7AKa5npkEGlUd8jbhgF/UXg9NZU5woxmte46vGSGrOxZR9UaiCNzbfNDPxFgvLGxrTnJjuDx+Jh+aXhdq7lijNU2vGrDqZ3coageWY+DnDx7ZSNVQ409dWwduNEasa/qrZGoCVWKtmestuElYumWuzS7Y+wlAOxao3JedBeh06dYGLuKWXhpeDlz1TBWB+CFQ/B2XgKSNTLZBHyrVaymPhgdvc0O/8rwIrUkwBqC2GKttnx13gVvxrHTGqtGqdHB6y54EV5FNLTa8IPyTvCG3dTLHKW4qe+Cdwe8zKMMWmblQ+FFz/nGF8REBdmuzdm+OrzIXOmWsdpx9k5vY63syrKwgud869cBu1mr8OLwUuZKt+LKfTjnVcEIej0ItO5yjE+QBCMeMvbamzMqnjtyWIeXqCfsG+FdUWtQokwAM8sssWb0ag19qTUKvL2/Egmj26nWGB2+I3iputgNjt7GwY9v0bCmlGyRf2l4QxBjeXfBC9OYv4EVeMcmBeAOVVTX2T6GGg++tjqV9mvD26qGqI/rpsXIyHPk/KrcG7RM9syiQANMQsMiqfHacmhRWLP3elFf+pTwwsCLeBte7jDhHT0qo8VRhJf5UCGJUmknemtExwxiqfdKVLHFzsuYfX9kbMA7Mw5+GN70DJsz81RmLM2GtwZ7UkUbUwrVAyVEKYin45TsBD6CSI3/Lln2op3IZzcPro/maysGGDIWrOxDW5tzXB3wvGcvI98V7aEAL3RxRTEniRiEIntlTFMJCqNecFnzaE3tlaJvfethXd9NBShYgde1qyNmQHpGeHmiFDgAbxdFYJdsujYFeq3A2zog6/QYNRxAtcub4ihreZCRc9C9mnZSz1QRXpYNKT78ZH7ObnAWHtichSAFY0YxRlzO4ey6MabxOAbqdmEaF3VoXX2ETtAGLcPb5F80H+bn/OfdqZepgPwReGec9gWhdGGIK0EoqG62w/ChrRAjowFCWKVeeOooBSftlXwF74gxcqNAv3V4V0LIjEVts10LMVrFV4MkULGTpwtPey+83x1tSz7n778+1r5fyec8hBfkI3JHhKBbWB4jUA9XfCjBrqMnsxr/KcFrGglaXFxmiXxwG/B2EUjv3pzDRzf0lePp6CKPuswdV88XAjMIr9kVvm0S9SCBCLqDpGaUnqOxpUYOzCad9OHbEw/xR/7ANLpTtjbMu6n35z9+PtL+iLUUvv79EPH+/us6vDoXi2jgVfm3/HZdWoa9/oKZeroECCW5BuADklK6S9oQxRsOgKI39NejTkTp7uVe/Oh+FARgq9yjU++9NoWkypiFl0WCST/BoeeWnChKfm6JOks9Q+BaaFRbLvfEVZde7g8gAmXU75+FH461n/6zPPXNwbZeCcUNwuFWfwsw/EVVGLLNwHcPjKaEI+H7fmH1eujViXwoqx/desa/E96/HGx/D7+F8LfPjrUfw68fRMLez/97OJgsNj6X/hjf4AH82oYQL8dO3PFhr738vvD+FMJnnx9C9/Mfwzfhah+xvi94L3gveC94L3gveK92wXu1C96rXfBe8F7wXvBe8F7wXvBe8N6kuTcm5Hu0ginPBK/jVbXv0NxFvR8ELzT+Dqv3Zlv4cUoE9QmLlcEJahqeA95ctiS1TdRSkqjDjiou+tnctZAkrWqSRnrBSz1goluwVevVHrMz4j43MyCJ58x9q/y6oElu5lze5i0deXgmeHu/t/UKVDnF2w54oXdCvCu8lqe8sm+oou1uyv2dAF7ovVZvBW8gYTqfgnrt0D/6gziEj4dXqj1xI3ijTyP6u4I2Zp5w5+4MrzEk9uQovrG2+s2W4MfDW4PFUmmC5fNuA29xgSYRlpFxuxtrleFNgWNYUO3Icsr+z88Dbw1SoKUJbgavQD/3FKtt8o7Pa+kNgfY5euGZ4NU1MT6kGgac34RO28HhbXLS1x9dicaMlVOxK1GS4b8sHSZXx3bAfuRGm+HVxctR8TiS9Bjjiutg8+8hF37Vsb5rGQwZPIiiGOsTap/LQE8Cr3Ug87uu//X+s3cjCotGhbjxVRrD71e2gQJvqciSj+JURYNFoHTnE/47U++ewZDRCLifinrtcP6ztoMQNYNX9mnP/yJFY5B81juvZOLzVWABuFX7skK9TSxoyjfJ3tW8Kl6LxWZz4VcNfMwB8nvZzoajoUFQ9IHTUO80CPjBIk+2nsgEXuDnK/1R97GfTeJAEoSEEmrmBTQG+llkvdkj0OcFHcLbvis3WwqRpr9VW6KqHsU1KE2zVBy1U10noGh8lkuzmHAC1srkAXopHlOIs9wHr+1SJ7W3WqnzNB5jeTmkcol02vNMK/Ayyd5UbXlixXLQo2qDe0sORaNZOhjsHkdThl9mM/91BniBVAmCXvfYx8DvhHdagxdGnecJ0myqcxEqVevSGSk8eABvHUwVh+stiXpzLKgMb8rzwQbj6AeYUiVRkTHaOqcnUGvU/K8MYJKpG9OPlDp+792cEd22cxIgj5ciHCUtSq4uuEW9UCrkQMYxZlvRLJ+ELYVITcRHTSL1TpYOpuTvUnU0GmHPo1+qEZpTbM6x6J8h6Qk8/pqkLACNGUr2wduyVvRazWDDOs9FAgu8iqS1WnLs1702C+dDeIusohANWzMvKEq+NSNqDCftWau69GNRQ1CYkCErgyyOv6R1qnO59HkOixFuPl2NeR217C5LDDG/0D54W8GIXivB8arvvE6QSpUFFZarywoln6Vw2KXWSEtNqyp2J3okrFVdZL1gVOGF5GiCKoI6BVEWgK6Qhz2JYBRyKowuj0VentmCAoDLdSf1ekq9rtmca9FeymbFCqPM8uDAl4xFFZhfQJY0kXpniUTxrTSlrEshoWTNWaxkmNUalHoR3swWpGcNZq9USYmROTBF4J2XsF9wPwP1OppxIFlZmFRBlZdpm9xDvW54DWrnvuu8TBAALXGn8R41NMgyi5GpRbuj+sNjGkoyKNsWpGuUkmVJlbX0i2V1ji1Pjqdx9Dqch3pDm7MkQqi5yimDZdQN4PVl1lo2jmx7nonlmrB6yUwPuwyCmiSR9Skdg23htWOdcxWMgOi0TK1SrtE3pEriCV7lTgVvcsfRXa0+lsmsLN0bUG+juC9Vn2NV1iQY1boO+UeWaUuLfhgdvJZUsOK5VAi8hiemlai3gVf1ifemBl44nackAbiuT2741LeCNxQJBrW/ddsbw+uQBeySHUnwakX8gKxo0bZ93uE1ePGMDVLqLITXng/eBHCVfz4xvLANbzrjjJSqrBeMgKTDoSoUq/W94DXTueENmPBaSfDaj4bXJd2xGSS144JRzbBDD20QWKu3w2s1b6eE13HzJYWXsR2FtfLvhte1B7urrJVfp17IqaFFSyOn3s4DA+gHvg9eX1iugQb/VNQLnQZ6GbjiQoN3gEnsO3iL0t/tZa0Mq3niO8FoAG8ysYIWybfROTc7Q9JMwE2pl/pVR9HrfPA6Vpsgf70O9R/AFTjQ2nsp94k3bQhGnVCtq1VjBd7iNlFf6nfAm9+bfa6QtX0fvKrPBX1K6p03SlXt1o7q3Syq4xadDtBaVPUbwFXlFmAtAwavClkDRND2TeeqZtNegRdyYImrbP0BeKfkahTA7qBeG5jWSoC36vBg8daJWjk4I7zLkNHAjZaD1sWOAMfgzetBk20QCdYSBS5TWFZ7KFH6MJtLD+/8Js2LKe3bnHGVtR84hncq+83o7PVoJS88vSUfdip4MxOIpQnS+iyiu44qXGJCp/B6NIyBUq1zsa2XWoMg1M6hdM4MgiK8yzqMvrpWdDAZnL11BeKTK/CWRT2PagVex92H1dLvmeElxu55gjyk2gamy7fte18r6rMwaV4syAzM+a5PrF8rqazAu7zB7vXWaBw7q7ZjDV6Wbn8FXpS2TP3zpPB2Ce61L5/aqN56Z5wmyGEWSsjkuaYqGPfWGHS+Dq9YGGGTcyavMnaVc2ZvWYNXCN25Kbyf728brJVq/CpqUnrgGbdrOm8eAEqdpjQM/KlEXyvWOTDe01j+Ltu671g1CiEzUultLY/Qmm4XcOVeQ32tenhbT7TMoDaxsfDXg+2HmPD3WPvvRsJfKIYUy4MmHaY+t1oF4rBIs1kXfX26JTuGuuZSXNrsGuscvURK50H4Md+fYjslk0J00xFDLOQR5n+CfG8kRp38OCop4AswbNZqJU9N+D8mx6tKYKUwbgAAAABJRU5ErkJggg=="
+};
+
+/* ============================================================ CONFIG */
+const FILE_CANDIDATES = ["battle-cards.xlsx", "battle-cards.csv", "Battle-Cards.xlsx"];
+const SHEET_NAME      = "Cards";
+const HEADER_ROW      = 3;
+const EXPORT_SCALE    = 2;          // 1200x675 -> 2400x1350
+
+const FACETS = [
+  { key:"industry",  label:"Industry",         multi:false },
+  { key:"country",   label:"Country",          multi:false },
+  { key:"workloads", label:"Workloads",        multi:true, grouped:true },
+  { key:"employees", label:"Company size",     multi:false, order:["1 to 50","51 to 250","251 to 1,000","1,001 to 5,000","More than 5,000"] },
+  { key:"users",     label:"Users",            multi:false, order:["1 to 25","26 to 100","101 to 500","501 to 2,000","More than 2,000"] },
+  { key:"reference", label:"Reference status", multi:false },
+  { key:"source",    label:"Source",           multi:false },
+  { key:"year",      label:"Go live year",     multi:false, desc:true },
+  { key:"tags",      label:"Tags",             multi:true }
+];
+
+/* ============================================================ STATE */
+let CARDS = [];
+const SEL = {};
+FACETS.forEach(f => SEL[f.key] = new Set());
+let QUERY = "", SORT = "updated";
+const LOGO_WARNED = new Set();
+
+/* ============================================================ HELPERS */
+const $  = s => document.querySelector(s);
+const el = (t, c, txt) => { const n = document.createElement(t); if(c) n.className = c; if(txt != null) n.textContent = txt; return n; };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
+const norm = s => String(s ?? "").trim();
+
+let toastTimer;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 7000);
+}
+
+function slug(s){
+  return norm(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "card";
+}
+function monogram(name){
+  const w = norm(name).split(/\s+/).filter(Boolean);
+  return ((w[0]?.[0] ?? "") + (w[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function toDate(v){
+  if(v == null || v === "") return null;
+  if(v instanceof Date && !isNaN(v)) return v;
+  if(typeof v === "number"){
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return isNaN(d) ? null : d;
+  }
+  const s = norm(v);
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){
+    let y = +m[3]; if(y < 100) y += 2000;
+    const d = new Date(Date.UTC(y, +m[2] - 1, +m[1]));
+    return isNaN(d) ? null : d;
+  }
+  m = s.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
+  if(m) return new Date(Date.UTC(+m[1], +m[2] - 1, +(m[3] || 1)));
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+const monthYear = d => d ? MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() : "";
+const dayMonthYear = d => d ? String(d.getUTCDate()).padStart(2,"0") + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() : "";
+
+function chipClass(w){
+  if(/^AI:/i.test(w))   return "ai";
+  if(/^D365:/i.test(w)) return "d365";
+  if(/^PP:/i.test(w))   return "pp";
+  return "";
+}
+const chipLabel = w => norm(w).replace(/^(AI|D365|PP):\s*/i, "");
+const groupOf   = w => (norm(w).match(/^(AI|D365|PP):/i) || [,"Other"])[1].toUpperCase();
+const GROUP_NAME = { AI:"AI & Copilot", D365:"Dynamics 365", PP:"Power Platform", OTHER:"Other" };
+
+/* ============================================================ LOGO URLS
+   Whatever someone pastes into the Logo URL column has to end up as
+   something an <img> can actually load. The common failures, in order of
+   how often they happen:
+     1. a share link to a viewer page rather than to the image bytes
+     2. an http:// url on an https:// page, which the browser blocks
+     3. a stray space, quote or angle bracket carried over from an email
+   A relative path such as logos/acme.png is the best case of all: same
+   origin, never blocked, and it always survives the PNG export.          */
+function resolveLogo(raw){
+  let u = norm(raw).replace(/^[<"'\s]+|[>"'\s]+$/g, "");
+  if(!u) return "";
+  if(/^data:/i.test(u)) return u;
+
+  // Google Drive share link -> direct file
+  let m = u.match(/drive\.google\.com\/file\/d\/([^/?#]+)/i) || u.match(/drive\.google\.com\/open\?id=([^&#]+)/i);
+  if(m) return "https://drive.google.com/uc?export=view&id=" + m[1];
+
+  // Dropbox share link -> raw bytes
+  if(/dropbox\.com\//i.test(u)) return u.replace(/[?&]dl=\d/i, "").replace(/([?&]raw=1)?$/, m2 => m2 || (u.includes("?") ? "&raw=1" : "?raw=1"));
+
+  // GitHub blob page -> raw bytes
+  m = u.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/(.+)$/i);
+  if(m) return "https://raw.githubusercontent.com/" + m[1] + "/" + m[2];
+
+  if(/^\/\//.test(u)) return location.protocol + u;
+  if(/^www\./i.test(u)) return "https://" + u;
+
+  // an https page cannot display an http image
+  if(/^http:\/\//i.test(u) && location.protocol === "https:") return u.replace(/^http:/i, "https:");
+
+  return u;   // absolute https url, or a relative path next to this file
+}
+
+/** Fetch an image and inline it as a data URI. Only needed at export time. */
+async function inlineImage(url){
+  if(/^data:/i.test(url)) return url;
+  const res = await fetch(url, { mode:"cors", credentials:"omit" });
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  const blob = await res.blob();
+  if(!/^image\//.test(blob.type) && !/\.(png|jpe?g|gif|webp|svg)$/i.test(url))
+    throw new Error("that link returns a web page, not an image");
+  return await new Promise((ok, no) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result);
+    r.onerror = () => no(new Error("could not read the image"));
+    r.readAsDataURL(blob);
+  });
+}
+
+/* ============================================================ PARSING */
+function colIndex(headers, ...names){
+  const H = headers.map(h => norm(h).toLowerCase().replace(/\s*\*\s*$/,"").replace(/[^a-z0-9]/g,""));
+  for(const n of names){
+    const k = n.toLowerCase().replace(/[^a-z0-9]/g,"");
+    const i = H.indexOf(k);
+    if(i > -1) return i;
+  }
+  return -1;
+}
+
+function rowsToCards(rows){
+  let hi = rows.findIndex(r => r.some(c => /customer\s*name/i.test(norm(c))));
+  if(hi < 0) hi = HEADER_ROW - 1;
+  const H = rows[hi].map(norm);
+
+  const I = {
+    name:      colIndex(H, "Customer Name"),
+    city:      colIndex(H, "HQ City", "City"),
+    country:   colIndex(H, "HQ Country", "Country"),
+    industry:  colIndex(H, "Industry"),
+    employees: colIndex(H, "Employee Range", "Employees"),
+    users:     colIndex(H, "User Range", "Users"),
+    summary:   colIndex(H, "Summary"),
+    golive:    colIndex(H, "Go Live Month", "Go Live"),
+    duration:  colIndex(H, "Duration (Months)", "Duration"),
+    owner:     colIndex(H, "AlfaPeople Owner", "Owner"),
+    mscontact: colIndex(H, "Microsoft Contact"),
+    reference: colIndex(H, "Reference Status", "Reference"),
+    url:       colIndex(H, "Case Study URL", "URL"),
+    source:    colIndex(H, "Source Org", "Source"),
+    tags:      colIndex(H, "Tags"),
+    logo:      colIndex(H, "Logo URL", "Logo"),
+    status:    colIndex(H, "Status"),
+    updated:   colIndex(H, "Last Updated", "Updated"),
+    updatedby: colIndex(H, "Updated By")
+  };
+  if(I.name < 0) throw new Error('No "Customer Name" column found on the sheet.');
+
+  const wlCols = H.map((h,i) => /^workload/i.test(h) ? i : -1).filter(i => i > -1);
+  const krCols = H.map((h,i) => /^key\s*result/i.test(h) ? i : -1).filter(i => i > -1);
+
+  const out = [];
+  for(let r = hi + 1; r < rows.length; r++){
+    const row = rows[r] || [];
+    const get = i => (i > -1 ? row[i] : undefined);
+    const name = norm(get(I.name));
+    if(!name) continue;
+
+    const status = norm(get(I.status)) || "Active";
+    if(/inactive/i.test(status)) continue;
+
+    const golive = toDate(get(I.golive));
+    const upd    = toDate(get(I.updated));
+
+    out.push({
+      order: r,
+      name,
+      city:      norm(get(I.city)),
+      country:   norm(get(I.country)),
+      industry:  norm(get(I.industry)),
+      employees: norm(get(I.employees)),
+      users:     norm(get(I.users)),
+      summary:   norm(get(I.summary)),
+      workloads: wlCols.map(i => norm(row[i])).filter(Boolean),
+      krs:       krCols.map(i => norm(row[i])).filter(Boolean),
+      golive, goliveLabel: monthYear(golive),
+      year:      golive ? String(golive.getUTCFullYear()) : "",
+      duration:  norm(get(I.duration)),
+      owner:     norm(get(I.owner)),
+      mscontact: norm(get(I.mscontact)),
+      reference: norm(get(I.reference)) || "Internal only",
+      url:       norm(get(I.url)),
+      source:    norm(get(I.source)),
+      tags:      norm(get(I.tags)).split(",").map(t => t.trim()).filter(Boolean),
+      logoRaw:   norm(get(I.logo)),
+      logo:      resolveLogo(get(I.logo)),
+      updated:   upd,
+      updatedby: norm(get(I.updatedby))
+    });
+  }
+  return out;
+}
+
+function parseWorkbook(buf){
+  if(typeof XLSX === "undefined") throw new Error("LIBFAIL");
+  const wb = XLSX.read(buf, { type:"array", cellDates:true });
+  const sheet = wb.Sheets[SHEET_NAME] || wb.Sheets[wb.SheetNames.find(n => /card/i.test(n))] || wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:"", blankrows:true });
+  return rowsToCards(rows);
+}
+
+function parseCSV(text){
+  const rows = []; let row = [], cell = "", q = false;
+  text = text.replace(/^﻿/, "");
+  const first = text.split("\n")[0];
+  const sep = first.split(";").length > first.split(",").length ? ";" : ",";
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(q){
+      if(c === '"'){ if(text[i+1] === '"'){ cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if(c === '"') q = true;
+    else if(c === sep){ row.push(cell); cell = ""; }
+    else if(c === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if(c !== "\r") cell += c;
+  }
+  row.push(cell); rows.push(row);
+  return rowsToCards(rows);
+}
+
+/* ============================================================ CARD RENDER */
+function cardNode(c){
+  const card = el("div", "card");
+  card.dataset.name = c.name;
+
+  // --- header: customer logo left, AlfaPeople right
+  const head = el("div", "chead");
+  if(c.logo){
+    const img = el("img", "logo");
+    img.alt = c.name + " logo";
+    img.decoding = "sync";
+    // No crossOrigin here on purpose. Setting it makes any server that does
+    // not send CORS headers refuse the image outright, which is exactly how
+    // this used to break. Display first; the export inlines it separately.
+    img.onerror = () => {
+      img.replaceWith(el("div", "mono", monogram(c.name)));
+      if(!LOGO_WARNED.has(c.name)){
+        LOGO_WARNED.add(c.name);
+        console.warn("Logo did not load for " + c.name + ": " + c.logo);
+      }
+    };
+    img.src = c.logo;
+    head.appendChild(img);
+  } else {
+    head.appendChild(el("div", "mono", monogram(c.name)));
+  }
+  const ap = el("img", "aplogo");
+  ap.src = BRAND.ap; ap.alt = "AlfaPeople";
+  head.appendChild(ap);
+  card.appendChild(head);
+
+  // --- identity
+  card.appendChild(el("h1", null, c.name));
+  const meta = el("div", "meta");
+  const bits = [
+    [c.city, c.country].filter(Boolean).join(", "),
+    c.industry,
+    c.employees ? c.employees + " employees" : ""
+  ].filter(Boolean);
+  bits.forEach((b, i) => { if(i) meta.appendChild(el("i", null, "·")); meta.appendChild(el("span", null, b)); });
+  card.appendChild(meta);
+  card.appendChild(el("hr", "rule"));
+
+  // --- body
+  const body = el("div", "body");
+  body.appendChild(el("p", "summary", c.summary));
+  if(c.krs.length){
+    const ul = el("ul", "krs");
+    c.krs.slice(0,3).forEach(k => ul.appendChild(el("li", null, k)));
+    body.appendChild(ul);
+  }
+  const chiprow = el("div", "chiprow");
+  const chips = el("div", "wchips");
+  c.workloads.forEach(w => chips.appendChild(el("span", "wchip " + chipClass(w), chipLabel(w))));
+  chiprow.appendChild(chips);
+  if(c.users){
+    const u = el("div", "users");
+    u.appendChild(el("b", null, c.users));
+    u.appendChild(el("span", null, "users"));
+    chiprow.appendChild(u);
+  }
+  body.appendChild(chiprow);
+  card.appendChild(body);
+
+  // --- footer: reference status drives the wording, partner badge on the right
+  const approved = /^approved$/i.test(c.reference);
+  const foot = el("div", "cfoot");
+  const ftext = el("div", "ftext");
+  ftext.appendChild(el("span", "badge " + (approved ? "ok" : "warn"),
+    approved ? "Reference approved" : "Internal reference only"));
+  const tail = [];
+  if(c.goliveLabel) tail.push("Go live " + c.goliveLabel);
+  if(c.duration)    tail.push(c.duration + "-month project");
+  tail.push(approved ? "AlfaPeople and Microsoft" : "Internal use. Not approved for external reference.");
+  tail.forEach(t => { ftext.appendChild(el("i", null, "·")); ftext.appendChild(el("span", null, t)); });
+  foot.appendChild(ftext);
+  const ms = el("img", "msbadge");
+  ms.src = BRAND.ms; ms.alt = "Microsoft Solutions Partner";
+  foot.appendChild(ms);
+  card.appendChild(foot);
+
+  return card;
+}
+
+function fitTiles(){
+  document.querySelectorAll(".tileframe").forEach(f => {
+    const s = f.clientWidth / 1200;
+    const card = f.firstElementChild;
+    card.style.transformOrigin = "top left";
+    card.style.transform = "scale(" + s + ")";
+    f.style.height = Math.round(675 * s) + "px";
+  });
+}
+window.addEventListener("resize", fitTiles);
+window.addEventListener("beforeprint", fitTiles);
+
+/* ============================================================ FILTERING */
+function valuesOf(c, key){
+  switch(key){
+    case "industry":  return c.industry ? [c.industry] : [];
+    case "country":   return c.country ? [c.country] : [];
+    case "workloads": return c.workloads;
+    case "employees": return c.employees ? [c.employees] : [];
+    case "users":     return c.users ? [c.users] : [];
+    case "reference": return c.reference ? [c.reference] : [];
+    case "source":    return c.source ? [c.source] : [];
+    case "year":      return c.year ? [c.year] : [];
+    case "tags":      return c.tags;
+  }
+  return [];
+}
+function matchesFacet(c, key){
+  const sel = SEL[key];
+  if(!sel.size) return true;
+  return valuesOf(c, key).some(v => sel.has(v));
+}
+function matchesQuery(c){
+  if(!QUERY) return true;
+  const hay = [c.name, c.summary, c.krs.join(" "), c.city, c.country, c.industry, c.tags.join(" "),
+               c.workloads.join(" "), c.owner].join(" ").toLowerCase();
+  return QUERY.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
+}
+const visible = () => CARDS.filter(c => matchesQuery(c) && FACETS.every(f => matchesFacet(c, f.key)));
+
+function facetCounts(key){
+  const base = CARDS.filter(c => matchesQuery(c) && FACETS.filter(f => f.key !== key).every(f => matchesFacet(c, f.key)));
+  const m = new Map();
+  base.forEach(c => valuesOf(c, key).forEach(v => m.set(v, (m.get(v) || 0) + 1)));
+  return m;
+}
+function allValues(key){
+  const s = new Set();
+  CARDS.forEach(c => valuesOf(c, key).forEach(v => s.add(v)));
+  return [...s];
+}
+
+/* ============================================================ URL STATE */
+function writeURL(){
+  const p = new URLSearchParams();
+  if(QUERY) p.set("q", QUERY);
+  FACETS.forEach(f => { if(SEL[f.key].size) p.set(f.key, [...SEL[f.key]].join("|")); });
+  if(SORT !== "updated") p.set("sort", SORT);
+  history.replaceState(null, "", location.pathname + (p.toString() ? "?" + p : ""));
+}
+function readURL(){
+  const p = new URLSearchParams(location.search);
+  QUERY = p.get("q") || "";
+  $("#q").value = QUERY;
+  FACETS.forEach(f => { SEL[f.key] = new Set((p.get(f.key) || "").split("|").filter(Boolean)); });
+  SORT = p.get("sort") || "updated";
+  $("#sort").value = SORT;
+}
+
+/* ============================================================ UI RENDER */
+function renderFacets(){
+  const host = $("#facetbody");
+  const open = new Set([...host.querySelectorAll("details[open]")].map(d => d.dataset.key));
+  host.innerHTML = "";
+
+  FACETS.forEach(f => {
+    const counts = facetCounts(f.key);
+    let vals = allValues(f.key);
+    if(!vals.length) return;
+
+    if(f.order)     vals.sort((a,b) => f.order.indexOf(a) - f.order.indexOf(b));
+    else if(f.desc) vals.sort((a,b) => b.localeCompare(a));
+    else            vals.sort((a,b) => a.localeCompare(b));
+
+    const d = el("details", "fgroup");
+    d.dataset.key = f.key;
+    d.open = open.has(f.key) || SEL[f.key].size > 0 || ["industry","workloads"].includes(f.key);
+
+    const sum = el("summary");
+    sum.appendChild(el("span", null, f.label));
+    if(SEL[f.key].size) sum.appendChild(el("span", "cnt", String(SEL[f.key].size)));
+    d.appendChild(sum);
+
+    const box = el("div", "fopts");
+    const emit = list => list.forEach(v => {
+      const n = counts.get(v) || 0;
+      const lab = el("label", "fopt" + (n === 0 && !SEL[f.key].has(v) ? " zero" : ""));
+      const cb = el("input"); cb.type = "checkbox"; cb.checked = SEL[f.key].has(v);
+      cb.addEventListener("change", () => { cb.checked ? SEL[f.key].add(v) : SEL[f.key].delete(v); update(); });
+      lab.appendChild(cb);
+      lab.appendChild(el("span", "lbl", f.key === "workloads" ? chipLabel(v) : v));
+      lab.appendChild(el("span", "cnt", String(n)));
+      box.appendChild(lab);
+    });
+
+    if(f.grouped){
+      const groups = {};
+      vals.forEach(v => (groups[groupOf(v)] ||= []).push(v));
+      ["AI","D365","PP","OTHER"].forEach(g => {
+        if(!groups[g]) return;
+        box.appendChild(el("div", "subhead", GROUP_NAME[g]));
+        emit(groups[g]);
+      });
+    } else emit(vals);
+
+    d.appendChild(box);
+    host.appendChild(d);
+  });
+}
+
+function renderChips(){
+  const host = $("#activechips");
+  host.innerHTML = "";
+  let any = false;
+  FACETS.forEach(f => SEL[f.key].forEach(v => {
+    any = true;
+    const c = el("span", "chip");
+    c.appendChild(el("span", null, (f.key === "workloads" ? "" : f.label + ": ") + (f.key === "workloads" ? chipLabel(v) : v)));
+    const b = el("button"); b.type = "button"; b.textContent = "×";
+    b.setAttribute("aria-label", "Remove filter " + v);
+    b.addEventListener("click", () => { SEL[f.key].delete(v); update(); });
+    c.appendChild(b);
+    host.appendChild(c);
+  }));
+  $("#clear").classList.toggle("hidden", !any && !QUERY);
+}
+
+function sortCards(list){
+  const s = [...list];
+  if(SORT === "name")       s.sort((a,b) => a.name.localeCompare(b.name));
+  else if(SORT === "added") s.sort((a,b) => b.order - a.order);
+  else s.sort((a,b) => (b.updated?.getTime() || 0) - (a.updated?.getTime() || 0) || b.order - a.order);
+  return s;
+}
+
+function renderGrid(list){
+  const grid = $("#grid");
+  grid.innerHTML = "";
+  list.forEach(c => {
+    const tile = el("div", "tile");
+    const frame = el("div", "tileframe");
+    frame.tabIndex = 0;
+    frame.setAttribute("role", "button");
+    frame.setAttribute("aria-label", "Open " + c.name);
+    frame.appendChild(cardNode(c));
+    frame.addEventListener("click", () => openCard(c));
+    frame.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openCard(c); } });
+    tile.appendChild(frame);
+
+    const acts = el("div", "tileactions noprint");
+    const dl = el("button", "btn btn-quiet", "Download image");
+    dl.type = "button";
+    dl.addEventListener("click", e => { e.stopPropagation(); exportCard(c, dl); });
+    acts.appendChild(dl);
+    if(c.url){
+      const a = el("a", "btn btn-quiet", "Case study");
+      a.href = c.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.addEventListener("click", e => e.stopPropagation());
+      acts.appendChild(a);
+    }
+    tile.appendChild(acts);
+    grid.appendChild(tile);
+  });
+  fitTiles();
+}
+
+function update(){
+  const list = sortCards(visible());
+  $("#n").textContent = list.length;
+  $("#nlabel").textContent = list.length === 1 ? "card" : "cards";
+  renderFacets();
+  renderChips();
+  renderGrid(list);
+  $("#empty").classList.toggle("hidden", list.length > 0);
+  $("#grid").classList.toggle("hidden", list.length === 0);
+  writeURL();
+}
+
+function clearAll(){
+  FACETS.forEach(f => SEL[f.key].clear());
+  QUERY = ""; $("#q").value = "";
+  update();
+}
+
+/* ============================================================ DETAIL */
+function openCard(c){
+  $("#mtitle").textContent = c.name;
+  const body = $("#mbody");
+  body.innerHTML = "";
+  const holder = el("div");
+  holder.style.width = "1200px";
+  holder.appendChild(cardNode(c));
+  body.appendChild(holder);
+
+  const d = $("#mdetail");
+  d.innerHTML = "";
+  const fields = [
+    ["Headquarters", [c.city, c.country].filter(Boolean).join(", ")],
+    ["Industry", c.industry],
+    ["Company size", c.employees ? c.employees + " employees" : ""],
+    ["Users", c.users],
+    ["Workloads", c.workloads.join(" · ")],
+    ["Go live", c.goliveLabel],
+    ["Project duration", c.duration ? c.duration + " months" : ""],
+    ["AlfaPeople owner", c.owner],
+    ["Microsoft contact", c.mscontact],
+    ["Reference status", c.reference],
+    ["Source", c.source],
+    ["Tags", c.tags.join(", ")],
+    ["Case study", c.url],
+    ["Last updated", [dayMonthYear(c.updated), c.updatedby].filter(Boolean).join(" · ")]
+  ];
+  fields.forEach(([k, v]) => {
+    if(!v) return;
+    const box = el("div");
+    box.appendChild(el("span", null, k));
+    const p = el("p");
+    if(k === "Case study") p.innerHTML = '<a href="' + esc(v) + '" target="_blank" rel="noopener noreferrer">' + esc(v) + "</a>";
+    else p.textContent = v;
+    box.appendChild(p);
+    d.appendChild(box);
+  });
+
+  $("#mdl").onclick = () => exportCard(c, $("#mdl"));
+  $("#overlay").classList.add("on");
+  document.body.style.overflow = "hidden";
+}
+function closeCard(){
+  $("#overlay").classList.remove("on");
+  document.body.style.overflow = "";
+}
+
+/* ============================================================ PNG EXPORT */
+async function exportCard(c, btn){
+  if(typeof htmlToImage === "undefined"){
+    toast("The image library did not load — this machine looks offline. Use Print and choose Save as PDF instead.");
+    return;
+  }
+  const old = btn.textContent;
+  btn.textContent = "Rendering…";
+  btn.disabled = true;
+
+  const stage = $("#stage");
+  stage.innerHTML = "";
+  const node = cardNode(c);
+  stage.appendChild(node);
+
+  // A canvas can only be exported if every image on it is same origin. The
+  // brand assets already are. The customer logo has to be fetched and inlined;
+  // if its server refuses, the card exports with the monogram instead.
+  const custom = node.querySelector("img.logo");
+  let logoDropped = false;
+  if(custom && c.logo){
+    try{
+      custom.src = await inlineImage(c.logo);
+    }catch(err){
+      logoDropped = true;
+      custom.replaceWith(el("div", "mono", monogram(c.name)));
+      console.warn("Logo excluded from the export for " + c.name + ": " + err.message);
+    }
+  }
+
+  await Promise.all([...node.querySelectorAll("img")].map(img => img.complete && img.naturalWidth
+    ? Promise.resolve()
+    : new Promise(res => { img.onload = img.onerror = res; setTimeout(res, 3000); })));
+
+  try{
+    const url = await htmlToImage.toPng(node, {
+      pixelRatio: EXPORT_SCALE, width: 1200, height: 675,
+      backgroundColor: "#ffffff", cacheBust: false, skipFonts: true
+    });
+    const a = document.createElement("a");
+    const d = new Date();
+    const stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,"0") + String(d.getDate()).padStart(2,"0");
+    a.download = "alfapeople-battlecard-" + slug(c.name) + "-" + stamp + ".png";
+    a.href = url;
+    a.click();
+    if(logoDropped) toast("Exported with the monogram: " + c.name + "'s logo server will not allow other sites to read the file. Save the logo into a logos folder next to these files and put logos/" + slug(c.name) + ".png in the Logo URL column.");
+  }catch(err){
+    console.error(err);
+    toast("The image could not be generated: " + err.message);
+  }finally{
+    stage.innerHTML = "";
+    btn.textContent = old;
+    btn.disabled = false;
+  }
+}
+
+/* ============================================================ LOADING */
+function showPickerError(msg){
+  const box = $("#pickerr");
+  box.textContent = msg;
+  box.classList.remove("hidden");
+}
+function boot(cards){
+  if(!cards.length){
+    $("#boot").classList.remove("hidden");
+    $("#boot").innerHTML = '<h3>The spreadsheet has no active cards</h3>' +
+      '<p>Add at least one row to the <code>Cards</code> sheet with <code>Status = Active</code>, save, then reload this page.</p>';
+    return;
+  }
+  CARDS = cards;
+  $("#boot").classList.add("hidden");
+  $("#picker").classList.add("hidden");
+  $("#shell").classList.remove("hidden");
+  readURL();
+  update();
+}
+
+async function autoLoad(){
+  if(location.protocol === "file:"){
+    $("#boot").classList.add("hidden");
+    $("#picker").classList.remove("hidden");
+    return;
+  }
+  for(const f of FILE_CANDIDATES){
+    try{
+      const res = await fetch(f + "?t=" + Date.now(), { cache:"no-store" });
+      if(!res.ok) continue;
+      if(/\.csv$/i.test(f)) boot(parseCSV(await res.text()));
+      else                  boot(parseWorkbook(await res.arrayBuffer()));
+      return;
+    }catch(e){ /* next candidate */ }
+  }
+  $("#boot").classList.add("hidden");
+  $("#picker").classList.remove("hidden");
+  showPickerError("Could not find battle-cards.xlsx next to this page. Choose it manually below.");
+}
+
+function loadFile(file){
+  const rd = new FileReader();
+  rd.onload = () => {
+    try{
+      if(/\.csv$/i.test(file.name)) boot(parseCSV(rd.result));
+      else boot(parseWorkbook(new Uint8Array(rd.result)));
+    }catch(err){
+      showPickerError(err.message === "LIBFAIL"
+        ? "The spreadsheet library could not load — this machine appears to be offline. Save the workbook as CSV and choose that file instead."
+        : "That file could not be read: " + err.message);
+    }
+  };
+  rd.onerror = () => showPickerError("The file could not be opened.");
+  if(/\.csv$/i.test(file.name)) rd.readAsText(file);
+  else rd.readAsArrayBuffer(file);
+}
+
+/* ============================================================ WIRING */
+document.addEventListener("DOMContentLoaded", () => {
+  $("#brandlogo").src = BRAND.ap;
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".xlsx,.xlsm,.csv";
+  input.addEventListener("change", () => { if(input.files[0]) loadFile(input.files[0]); });
+  $("#choose").addEventListener("click", () => input.click());
+
+  const drop = $("#drop");
+  ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("hot"); }));
+  ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("hot"); }));
+  drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if(f) loadFile(f); });
+
+  let t;
+  $("#q").addEventListener("input", e => {
+    clearTimeout(t);
+    t = setTimeout(() => { QUERY = e.target.value.trim(); update(); }, 140);
+  });
+  $("#sort").addEventListener("change", e => { SORT = e.target.value; update(); });
+  $("#clear").addEventListener("click", clearAll);
+  $("#clear2").addEventListener("click", clearAll);
+  $("#print").addEventListener("click", () => { fitTiles(); window.print(); });
+  $("#reload").addEventListener("click", () => location.reload());
+  $("#togglefacets").addEventListener("click", () => $("#facets").classList.toggle("collapsed"));
+  $("#mclose").addEventListener("click", closeCard);
+  $("#overlay").addEventListener("click", e => { if(e.target === $("#overlay")) closeCard(); });
+  document.addEventListener("keydown", e => {
+    if(e.key === "Escape") closeCard();
+    if(e.key === "/" && document.activeElement !== $("#q")){ e.preventDefault(); $("#q").focus(); }
+  });
+
+  autoLoad();
+});
+</script>
+</body>
+</html>
