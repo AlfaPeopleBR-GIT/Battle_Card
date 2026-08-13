@@ -9,7 +9,7 @@
   BATTLE CARDS — gallery renderer
   ------------------------------------------------------------------
   Reads battle-cards.xlsx sitting in the same folder and renders every
-  Active row as a 1200x675 card. Filter, search, print, export PNG.
+  row with a Customer Name as a 1200x460 card. Filter, search, print, export PNG.
 
   BRAND: colours, fonts and both logos come from TemplateAP_PPTX.pptx.
   Every colour is a CSS custom property in :root, so an official value
@@ -195,56 +195,53 @@ button{font-family:inherit}
 
 /* ============================================================ THE CARD */
 .card{
-  width:1200px; height:675px; flex:none;
+  width:1200px; height:460px; flex:none;
   background:var(--surface); color:var(--ink);
   font-family:var(--font);
-  padding:40px 52px 0; display:flex; flex-direction:column;
+  padding:32px 52px 0; display:flex; flex-direction:column;
   position:relative; overflow:hidden;
   border-top:7px solid var(--red);
 }
-.card .chead{display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:56px}
-.card .logo{height:54px; max-width:280px; object-fit:contain; object-position:left center; display:block}
+.card .chead{display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:48px}
+.card .logo{height:46px; max-width:260px; object-fit:contain; object-position:left center; display:block}
 .card .mono{
-  height:56px; min-width:56px; padding:0 18px; border-radius:8px;
+  height:48px; min-width:48px; padding:0 16px; border-radius:8px;
   background:var(--red); color:#fff;
   display:flex; align-items:center; justify-content:center;
-  font-size:24px; font-weight:700; letter-spacing:.06em;
+  font-size:20px; font-weight:700; letter-spacing:.06em;
 }
-.card .aplogo{height:34px; display:block; flex:none}
+.card .aplogo{height:28px; display:block; flex:none}
 
-.card h1{font-size:44px; line-height:1.06; margin:24px 0 10px; color:var(--ink); font-weight:700; letter-spacing:-.4px}
-.card .meta{font-size:16px; color:var(--ink-soft); display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.card h1{font-size:36px; line-height:1.1; margin:18px 0 6px; color:var(--ink); font-weight:700; letter-spacing:-.4px}
+.card .meta{font-size:15px; color:var(--ink-soft); display:flex; flex-wrap:wrap; gap:8px; align-items:center}
 .card .meta i{font-style:normal; color:var(--line)}
 
-.card .rule{border:none; border-top:2px solid var(--red-tint); margin:18px 0 0; height:0}
+.card .rule{border:none; border-top:2px solid var(--red-tint); margin:16px 0 0; height:0}
 
-.card .body{flex:1; display:flex; flex-direction:column; min-height:0; padding-top:20px}
-.card .summary{font-size:17.5px; line-height:1.52; color:var(--ink); margin:0}
-.card .krs{margin:18px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:8px}
-.card .krs li{
-  font-size:16px; line-height:1.35; font-weight:700; color:var(--ink);
-  display:flex; gap:10px; align-items:flex-start;
-}
-.card .krs li::before{content:"›"; color:var(--red); font-weight:700; font-size:19px; line-height:1.1}
+.card .body{flex:1; display:flex; flex-direction:column; min-height:0; padding-top:18px; justify-content:space-between; gap:16px}
 
-.card .chiprow{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-top:auto; padding-top:22px}
-.wchips{display:flex; flex-wrap:wrap; gap:8px}
+.card .stats{display:flex; flex-wrap:wrap}
+.card .stat{flex:1 1 0; min-width:130px; padding:0 20px; border-left:1px solid var(--line-soft)}
+.card .stat:first-child{padding-left:0; border-left:none}
+.card .stat span{display:block; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); font-weight:700; margin-bottom:5px}
+.card .stat b{display:block; font-size:19px; color:var(--ink); font-weight:700; line-height:1.25}
+
+.card .wblock .wlabel{font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); font-weight:700; margin-bottom:9px}
+.card .chiprow{display:flex; align-items:center}
+.wchips{display:flex; flex-wrap:wrap; gap:9px}
 .wchip{
-  font-size:13.5px; font-weight:600; padding:6px 13px; border-radius:999px;
+  font-size:14.5px; font-weight:600; padding:8px 16px; border-radius:999px;
   border:1px solid var(--other-bd); background:var(--other-bg); color:var(--other-fg); white-space:nowrap;
 }
 .wchip.ai{background:var(--ai-bg); color:var(--ai-fg); border-color:var(--ai-bd)}
 .wchip.d365{background:var(--d365-bg); color:var(--d365-fg); border-color:var(--d365-bd)}
 .wchip.pp{background:var(--pp-bg); color:var(--pp-fg); border-color:var(--pp-bd)}
-.card .users{text-align:right; flex:none; line-height:1.2}
-.card .users b{display:block; font-size:20px; color:var(--ink); font-weight:700}
-.card .users span{font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); font-weight:600}
 
 .card .cfoot{
-  margin:20px -52px 0; padding:12px 52px;
+  margin:16px -52px 0; padding:12px 52px;
   border-top:1px solid var(--line); background:#FAFAFA;
   display:flex; align-items:center; gap:12px;
-  font-size:13px; color:var(--ink-soft); min-height:62px;
+  font-size:13px; color:var(--ink-soft); min-height:56px;
 }
 .card .cfoot .ftext{display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex:1}
 .card .cfoot i{font-style:normal; color:var(--line)}
@@ -284,7 +281,7 @@ button{font-family:inherit}
 .err{font-size:12.5px; color:var(--red-dark); background:var(--red-wash); border:1px solid var(--red-tint); border-radius:8px; padding:9px 12px; margin-top:14px; text-align:left}
 .hint{font-size:12px; color:var(--ink-faint); margin-top:14px; line-height:1.6}
 .hidden{display:none !important}
-#stage{position:fixed; left:-100000px; top:0; width:1200px; height:675px}
+#stage{position:fixed; left:-100000px; top:0; width:1200px; height:460px}
 
 /* toast */
 #toast{
@@ -318,11 +315,10 @@ button{font-family:inherit}
 
   <div class="searchwrap">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#949494" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-    <input id="q" type="search" placeholder="Search customer, summary, results, tags…" autocomplete="off" aria-label="Search cards">
+    <input id="q" type="search" placeholder="Search customer, industry, workloads…" autocomplete="off" aria-label="Search cards">
   </div>
 
   <select id="sort" aria-label="Sort cards">
-    <option value="updated">Recently updated</option>
     <option value="added">Recently added</option>
     <option value="name">Customer name</option>
   </select>
@@ -405,7 +401,7 @@ const BRAND = {
 const FILE_CANDIDATES = ["battle-cards.xlsx", "battle-cards.csv", "Battle-Cards.xlsx"];
 const SHEET_NAME      = "Cards";
 const HEADER_ROW      = 3;
-const EXPORT_SCALE    = 2;          // 1200x675 -> 2400x1350
+const EXPORT_SCALE    = 2;          // 1200x460 -> 2400x920
 
 const FACETS = [
   { key:"industry",  label:"Industry",         multi:false },
@@ -414,17 +410,14 @@ const FACETS = [
   { key:"employees", label:"Company size",     multi:false, order:["1 to 50","51 to 250","251 to 1,000","1,001 to 5,000","More than 5,000"] },
   { key:"users",     label:"Users",            multi:false, order:["1 to 25","26 to 100","101 to 500","501 to 2,000","More than 2,000"] },
   { key:"segment",   label:"Microsoft segment",multi:false, order:["SMB","Corporate","Enterprise"] },
-  { key:"reference", label:"Reference status", multi:false },
-  { key:"source",    label:"Source",           multi:false },
-  { key:"year",      label:"Go live year",     multi:false, desc:true },
-  { key:"tags",      label:"Tags",             multi:true }
+  { key:"reference", label:"Reference status", multi:false }
 ];
 
 /* ============================================================ STATE */
 let CARDS = [];
 const SEL = {};
 FACETS.forEach(f => SEL[f.key] = new Set());
-let QUERY = "", SORT = "updated";
+let QUERY = "", SORT = "added";
 const LOGO_WARNED = new Set();
 
 /* ============================================================ HELPERS */
@@ -450,30 +443,6 @@ function monogram(name){
   const w = norm(name).split(/\s+/).filter(Boolean);
   return ((w[0]?.[0] ?? "") + (w[1]?.[0] ?? "")).toUpperCase() || "?";
 }
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-function toDate(v){
-  if(v == null || v === "") return null;
-  if(v instanceof Date && !isNaN(v)) return v;
-  if(typeof v === "number"){
-    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
-    return isNaN(d) ? null : d;
-  }
-  const s = norm(v);
-  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
-  if(m){
-    let y = +m[3]; if(y < 100) y += 2000;
-    const d = new Date(Date.UTC(y, +m[2] - 1, +m[1]));
-    return isNaN(d) ? null : d;
-  }
-  m = s.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
-  if(m) return new Date(Date.UTC(+m[1], +m[2] - 1, +(m[3] || 1)));
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
-}
-const monthYear = d => d ? MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() : "";
-const dayMonthYear = d => d ? String(d.getUTCDate()).padStart(2,"0") + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() : "";
-
 function chipClass(w){
   if(/^AI:/i.test(w))   return "ai";
   if(/^D365:/i.test(w)) return "d365";
@@ -558,24 +527,14 @@ function rowsToCards(rows){
     employees: colIndex(H, "Employee Range", "Employees"),
     users:     colIndex(H, "User Range", "Users"),
     segment:   colIndex(H, "MS Segment", "Microsoft Segment", "Segment"),
-    summary:   colIndex(H, "Summary"),
-    golive:    colIndex(H, "Go Live Month", "Go Live"),
-    duration:  colIndex(H, "Duration (Months)", "Duration"),
     owner:     colIndex(H, "AlfaPeople Owner", "Owner"),
-    mscontact: colIndex(H, "Microsoft Contact"),
     reference: colIndex(H, "Reference Status", "Reference"),
     url:       colIndex(H, "Case Study URL", "URL"),
-    source:    colIndex(H, "Source Org", "Source"),
-    tags:      colIndex(H, "Tags"),
-    logo:      colIndex(H, "Logo URL", "Logo"),
-    status:    colIndex(H, "Status"),
-    updated:   colIndex(H, "Last Updated", "Updated"),
-    updatedby: colIndex(H, "Updated By")
+    logo:      colIndex(H, "Logo URL", "Logo")
   };
   if(I.name < 0) throw new Error('No "Customer Name" column found on the sheet.');
 
   const wlCols = H.map((h,i) => /^workload/i.test(h) ? i : -1).filter(i => i > -1);
-  const krCols = H.map((h,i) => /^key\s*result/i.test(h) ? i : -1).filter(i => i > -1);
 
   const out = [];
   for(let r = hi + 1; r < rows.length; r++){
@@ -583,12 +542,6 @@ function rowsToCards(rows){
     const get = i => (i > -1 ? row[i] : undefined);
     const name = norm(get(I.name));
     if(!name) continue;
-
-    const status = norm(get(I.status)) || "Active";
-    if(/inactive/i.test(status)) continue;
-
-    const golive = toDate(get(I.golive));
-    const upd    = toDate(get(I.updated));
 
     out.push({
       order: r,
@@ -599,22 +552,11 @@ function rowsToCards(rows){
       employees: norm(get(I.employees)),
       users:     norm(get(I.users)),
       segment:   norm(get(I.segment)),
-      summary:   norm(get(I.summary)),
       workloads: wlCols.map(i => norm(row[i])).filter(Boolean),
-      krs:       krCols.map(i => norm(row[i])).filter(Boolean),
-      golive, goliveLabel: monthYear(golive),
-      year:      golive ? String(golive.getUTCFullYear()) : "",
-      duration:  norm(get(I.duration)),
       owner:     norm(get(I.owner)),
-      mscontact: norm(get(I.mscontact)),
       reference: norm(get(I.reference)) || "Internal only",
       url:       norm(get(I.url)),
-      source:    norm(get(I.source)),
-      tags:      norm(get(I.tags)).split(",").map(t => t.trim()).filter(Boolean),
-      logoRaw:   norm(get(I.logo)),
-      logo:      resolveLogo(get(I.logo)),
-      updated:   upd,
-      updatedby: norm(get(I.updatedby))
+      logo:      resolveLogo(get(I.logo))
     });
   }
   return out;
@@ -681,35 +623,43 @@ function cardNode(c){
   // --- identity
   card.appendChild(el("h1", null, c.name));
   const meta = el("div", "meta");
-  const bits = [
-    [c.city, c.country].filter(Boolean).join(", "),
-    c.industry,
-    c.employees ? c.employees + " employees" : "",
-    c.segment
-  ].filter(Boolean);
-  bits.forEach((b, i) => { if(i) meta.appendChild(el("i", null, "·")); meta.appendChild(el("span", null, b)); });
+  const loc = [c.city, c.country].filter(Boolean).join(", ");
+  if(loc) meta.appendChild(el("span", null, loc));
   card.appendChild(meta);
   card.appendChild(el("hr", "rule"));
 
-  // --- body
+  // --- body: a stat strip (industry/size/users/segment) on top, workloads
+  // anchored to the bottom - this is what used to be filled by the summary
+  // and key results text, so it carries the visual weight now.
   const body = el("div", "body");
-  body.appendChild(el("p", "summary", c.summary));
-  if(c.krs.length){
-    const ul = el("ul", "krs");
-    c.krs.slice(0,3).forEach(k => ul.appendChild(el("li", null, k)));
-    body.appendChild(ul);
+
+  const statDefs = [
+    ["Industry", c.industry],
+    ["Company size", c.employees],
+    ["Users", c.users],
+    ["MS segment", c.segment]
+  ].filter(([, v]) => v);
+  if(statDefs.length){
+    const stats = el("div", "stats");
+    statDefs.forEach(([label, value]) => {
+      const s = el("div", "stat");
+      s.appendChild(el("span", null, label));
+      s.appendChild(el("b", null, value));
+      stats.appendChild(s);
+    });
+    body.appendChild(stats);
   }
-  const chiprow = el("div", "chiprow");
-  const chips = el("div", "wchips");
-  c.workloads.forEach(w => chips.appendChild(el("span", "wchip " + chipClass(w), chipLabel(w))));
-  chiprow.appendChild(chips);
-  if(c.users){
-    const u = el("div", "users");
-    u.appendChild(el("b", null, c.users));
-    u.appendChild(el("span", null, "users"));
-    chiprow.appendChild(u);
+
+  if(c.workloads.length){
+    const wblock = el("div", "wblock");
+    wblock.appendChild(el("div", "wlabel", "Workloads"));
+    const chiprow = el("div", "chiprow");
+    const chips = el("div", "wchips");
+    c.workloads.forEach(w => chips.appendChild(el("span", "wchip " + chipClass(w), chipLabel(w))));
+    chiprow.appendChild(chips);
+    wblock.appendChild(chiprow);
+    body.appendChild(wblock);
   }
-  body.appendChild(chiprow);
   card.appendChild(body);
 
   // --- footer: reference status drives the wording, partner badge on the right
@@ -719,8 +669,7 @@ function cardNode(c){
   ftext.appendChild(el("span", "badge " + (approved ? "ok" : "warn"),
     approved ? "Reference approved" : "Internal reference only"));
   const tail = [];
-  if(c.goliveLabel) tail.push("Go live " + c.goliveLabel);
-  if(c.duration)    tail.push(c.duration + "-month project");
+  if(c.owner) tail.push("Owner: " + c.owner);
   tail.push(approved ? "AlfaPeople and Microsoft" : "Internal use. Not approved for external reference.");
   tail.forEach(t => { ftext.appendChild(el("i", null, "·")); ftext.appendChild(el("span", null, t)); });
   foot.appendChild(ftext);
@@ -738,7 +687,7 @@ function fitTiles(){
     const card = f.firstElementChild;
     card.style.transformOrigin = "top left";
     card.style.transform = "scale(" + s + ")";
-    f.style.height = Math.round(675 * s) + "px";
+    f.style.height = Math.round(460 * s) + "px";
   });
 }
 window.addEventListener("resize", fitTiles);
@@ -754,9 +703,6 @@ function valuesOf(c, key){
     case "users":     return c.users ? [c.users] : [];
     case "segment":   return c.segment ? [c.segment] : [];
     case "reference": return c.reference ? [c.reference] : [];
-    case "source":    return c.source ? [c.source] : [];
-    case "year":      return c.year ? [c.year] : [];
-    case "tags":      return c.tags;
   }
   return [];
 }
@@ -767,7 +713,7 @@ function matchesFacet(c, key){
 }
 function matchesQuery(c){
   if(!QUERY) return true;
-  const hay = [c.name, c.summary, c.krs.join(" "), c.city, c.country, c.industry, c.tags.join(" "),
+  const hay = [c.name, c.city, c.country, c.industry,
                c.workloads.join(" "), c.owner, c.segment].join(" ").toLowerCase();
   return QUERY.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
 }
@@ -790,7 +736,7 @@ function writeURL(){
   const p = new URLSearchParams();
   if(QUERY) p.set("q", QUERY);
   FACETS.forEach(f => { if(SEL[f.key].size) p.set(f.key, [...SEL[f.key]].join("|")); });
-  if(SORT !== "updated") p.set("sort", SORT);
+  if(SORT !== "added") p.set("sort", SORT);
   history.replaceState(null, "", location.pathname + (p.toString() ? "?" + p : ""));
 }
 function readURL(){
@@ -798,7 +744,7 @@ function readURL(){
   QUERY = p.get("q") || "";
   $("#q").value = QUERY;
   FACETS.forEach(f => { SEL[f.key] = new Set((p.get(f.key) || "").split("|").filter(Boolean)); });
-  SORT = p.get("sort") || "updated";
+  SORT = p.get("sort") || "added";
   $("#sort").value = SORT;
 }
 
@@ -872,9 +818,8 @@ function renderChips(){
 
 function sortCards(list){
   const s = [...list];
-  if(SORT === "name")       s.sort((a,b) => a.name.localeCompare(b.name));
-  else if(SORT === "added") s.sort((a,b) => b.order - a.order);
-  else s.sort((a,b) => (b.updated?.getTime() || 0) - (a.updated?.getTime() || 0) || b.order - a.order);
+  if(SORT === "name") s.sort((a,b) => a.name.localeCompare(b.name));
+  else                s.sort((a,b) => b.order - a.order);
   return s;
 }
 
@@ -946,15 +891,9 @@ function openCard(c){
     ["Users", c.users],
     ["Microsoft segment", c.segment],
     ["Workloads", c.workloads.join(" · ")],
-    ["Go live", c.goliveLabel],
-    ["Project duration", c.duration ? c.duration + " months" : ""],
     ["AlfaPeople owner", c.owner],
-    ["Microsoft contact", c.mscontact],
     ["Reference status", c.reference],
-    ["Source", c.source],
-    ["Tags", c.tags.join(", ")],
-    ["Case study", c.url],
-    ["Last updated", [dayMonthYear(c.updated), c.updatedby].filter(Boolean).join(" · ")]
+    ["Case study", c.url]
   ];
   fields.forEach(([k, v]) => {
     if(!v) return;
@@ -1012,7 +951,7 @@ async function exportCard(c, btn){
 
   try{
     const url = await htmlToImage.toPng(node, {
-      pixelRatio: EXPORT_SCALE, width: 1200, height: 675,
+      pixelRatio: EXPORT_SCALE, width: 1200, height: 460,
       backgroundColor: "#ffffff", cacheBust: false, skipFonts: true
     });
     const a = document.createElement("a");
@@ -1041,8 +980,8 @@ function showPickerError(msg){
 function boot(cards){
   if(!cards.length){
     $("#boot").classList.remove("hidden");
-    $("#boot").innerHTML = '<h3>The spreadsheet has no active cards</h3>' +
-      '<p>Add at least one row to the <code>Cards</code> sheet with <code>Status = Active</code>, save, then reload this page.</p>';
+    $("#boot").innerHTML = '<h3>The spreadsheet has no cards</h3>' +
+      '<p>Add at least one row to the <code>Cards</code> sheet with a <code>Customer Name</code>, save, then reload this page.</p>';
     return;
   }
   CARDS = cards;
