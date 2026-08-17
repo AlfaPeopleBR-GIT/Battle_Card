@@ -217,6 +217,11 @@ button{font-family:inherit}
 .card .meta i{font-style:normal; color:var(--line)}
 
 .card .rule{border:none; border-top:2px solid var(--red-tint); margin:16px 0 0; height:0}
+.card .summary{
+  font-size:16px; line-height:1.5; color:var(--ink-soft); font-weight:400;
+  margin:16px 0 0; max-width:920px;
+  display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
 
 .card .body{flex:1; display:flex; flex-direction:column; min-height:0; padding-top:18px; justify-content:space-between; gap:16px}
 
@@ -530,7 +535,8 @@ function rowsToCards(rows){
     owner:     colIndex(H, "AlfaPeople Owner", "Owner"),
     reference: colIndex(H, "Reference Status", "Reference"),
     url:       colIndex(H, "Case Study URL", "URL"),
-    logo:      colIndex(H, "Logo URL", "Logo")
+    logo:      colIndex(H, "Logo URL", "Logo"),
+    summary:   colIndex(H, "Short Description", "Description")
   };
   if(I.name < 0) throw new Error('No "Customer Name" column found on the sheet.');
 
@@ -556,7 +562,8 @@ function rowsToCards(rows){
       owner:     norm(get(I.owner)),
       reference: norm(get(I.reference)) || "Internal only",
       url:       norm(get(I.url)),
-      logo:      resolveLogo(get(I.logo))
+      logo:      resolveLogo(get(I.logo)),
+      summary:   norm(get(I.summary))
     });
   }
   return out;
@@ -627,6 +634,8 @@ function cardNode(c){
   if(loc) meta.appendChild(el("span", null, loc));
   card.appendChild(meta);
   card.appendChild(el("hr", "rule"));
+
+  if(c.summary) card.appendChild(el("p", "summary", c.summary));
 
   // --- body: a stat strip (industry/size/users/segment) on top, workloads
   // anchored to the bottom - this is what used to be filled by the summary
@@ -714,7 +723,7 @@ function matchesFacet(c, key){
 function matchesQuery(c){
   if(!QUERY) return true;
   const hay = [c.name, c.city, c.country, c.industry,
-               c.workloads.join(" "), c.owner, c.segment].join(" ").toLowerCase();
+               c.workloads.join(" "), c.owner, c.segment, c.summary].join(" ").toLowerCase();
   return QUERY.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
 }
 const visible = () => CARDS.filter(c => matchesQuery(c) && FACETS.every(f => matchesFacet(c, f.key)));
@@ -885,6 +894,7 @@ function openCard(c){
   const d = $("#mdetail");
   d.innerHTML = "";
   const fields = [
+    ["Short description", c.summary],
     ["Headquarters", [c.city, c.country].filter(Boolean).join(", ")],
     ["Industry", c.industry],
     ["Company size", c.employees ? c.employees + " employees" : ""],
